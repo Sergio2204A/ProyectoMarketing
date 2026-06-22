@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const calendarController = require("../controllers/calendarController");
+const { generateTrends } = require("../controllers/trendsController");
 const { protect } = require("../middleware/authMiddleware");
 
-router.post("/", protect, calendarController.generateCalendar);
+router.post("/", protect, generateTrends);
 
 module.exports = router;

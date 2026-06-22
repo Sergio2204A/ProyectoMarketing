@@ -1,8 +1,8 @@
 const express = require("express");
-const copyController = require("../controllers/copycontroller");
-
 const router = express.Router();
+const copyController = require("../controllers/copycontroller");
+const { protect } = require("../middleware/authMiddleware");
 
-router.post("/", copyController.generateCopy);
+router.post("/", protect, copyController.generateCopy);
 
 module.exports = router;

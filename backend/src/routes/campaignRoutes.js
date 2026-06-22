@@ -1,8 +1,8 @@
 const express = require("express");
-const campaignControllers = require("../controllers/campaignControllers");
-
 const router = express.Router();
+const campaignControllers = require("../controllers/campaignControllers");
+const { protect } = require("../middleware/authMiddleware");
 
-router.post("/", campaignControllers.generateCampaign);
+router.post("/", protect, campaignControllers.generateCampaign);
 
 module.exports = router;

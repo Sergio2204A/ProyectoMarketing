@@ -1,20 +1,8 @@
 const express = require("express");
-
 const router = express.Router();
+const { generateHashtags } = require("../controllers/hashtagController");
+const { protect } = require("../middleware/authMiddleware");
 
-const hashtagController =
-require("../controllers/hashtagController");
-
-console.log("CONTROLADOR:", hashtagController);
-
-const { generateHashtags } =
-hashtagController;
-
-console.log("generateHashtags =", generateHashtags);
-
-router.post(
-  "/",
-  generateHashtags
-);
+router.post("/", protect, generateHashtags);
 
 module.exports = router;

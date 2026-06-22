@@ -107,9 +107,31 @@ IMPORTANTE: Devuelve ÚNICAMENTE el array JSON válido. No incluyas explicacione
   return await callGroq(prompt);
 }
 
+async function generateTrendsAI(topic) {
+  const prompt = `
+Eres un experto en marketing digital y tendencias en redes sociales.
+Analiza el siguiente nicho o tema: "${topic}" y genera exactamente 6 tendencias actuales y relevantes de marketing digital para ese sector.
+
+Devuelve ÚNICAMENTE un array JSON válido con exactamente 6 objetos, sin explicaciones previas ni bloques de código markdown. Sigue estrictamente este esquema:
+[
+  {
+    "title": "Título corto y llamativo de la tendencia",
+    "description": "Descripción de 2-3 oraciones explicando la tendencia, su impacto y cómo aplicarla.",
+    "color": "#a5b4fc"
+  }
+]
+
+Usa colores variados y atractivos en hexadecimal para el campo color. Ejemplos: #a5b4fc, #38bdf8, #34d399, #fb923c, #f472b6, #facc15.
+  `;
+  const raw = await callGroq(prompt);
+  const clean = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/, "").trim();
+  return JSON.parse(clean);
+}
+
 module.exports = {
   generateCampaignAI,
   generateCopyAI,
   generateHashtagsAI,
   generateCalendarAI,
+  generateTrendsAI,
 };
