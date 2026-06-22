@@ -1,62 +1,43 @@
 const dotenv = require("dotenv");
 dotenv.config();
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
-/**
- * Llama a la API de Gemini para generar contenido basado en un prompt.
- * @param {string} prompt - El prompt detallado para el modelo.
- * @returns {Promise<string>} - El texto generado.
- */
-async function callGemini(prompt, responseType) {
-  if (!GEMINI_API_KEY) {
-    console.error("API Key de Gemini no encontrada. Por favor configúrala en el archivo .env");
-    throw new Error("Clave de API de Gemini no configurada.");
+async function callGroq(prompt) {
+  if (!GROQ_API_KEY) {
+    throw new Error("Clave de API de Groq no configurada. Agrégala en el archivo .env como GROQ_API_KEY.");
   }
 
-  try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: responseType ? { responseMimeType: responseType } : undefined,
-      }),
-    });
+  const response = await fetch(GROQ_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.8,
+    }),
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error de API Gemini: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!generatedText) {
-      throw new Error("La respuesta de la IA no contiene texto válido.");
-    }
-
-    return generatedText.trim();
-  } catch (error) {
-    console.error("Error en callGemini:", error);
-    throw error;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error de API Groq: ${response.status} - ${errorText}`);
   }
+
+  const data = await response.json();
+  const generatedText = data.choices?.[0]?.message?.content;
+
+  if (!generatedText) {
+    throw new Error("La respuesta de la IA no contiene texto válido.");
+  }
+
+  return generatedText.trim();
 }
 
-/**
- * Genera una campaña estructurada.
- */
 async function generateCampaignAI(product, goal, audience, channel) {
   const prompt = `
 Eres un experto en marketing digital y redactor publicitario estrella.
@@ -74,12 +55,9 @@ Por favor, estructura tu respuesta utilizando Markdown con emojis atractivos. La
 4. **Copy Persuasivo**: Un par de variaciones de textos listos para usar (uno emocional, uno directo a la acción).
 5. **Hashtags Clave**: Una lista de 5-7 hashtags estratégicos.
   `;
-  return await callGemini(prompt);
+  return await callGroq(prompt);
 }
 
-/**
- * Genera copys persuasivos.
- */
 async function generateCopyAI(product, audience) {
   const prompt = `
 Eres un copywriter profesional experto en neuro-ventas.
@@ -93,12 +71,9 @@ Usa una de las siguientes fórmulas clásicas de copywriting para cada variació
 
 Usa emojis, espaciados limpios y llamadas a la acción (CTA) súper atractivas.
   `;
-  return await callGemini(prompt);
+  return await callGroq(prompt);
 }
 
-/**
- * Genera hashtags limpios.
- */
 async function generateHashtagsAI(product) {
   const prompt = `
 Genera una lista de hashtags relevantes, populares y estratégicos en redes sociales para promocionar el siguiente producto o tema: "${product}".
@@ -106,12 +81,9 @@ Incluye una mezcla de hashtags de gran alcance (genéricos) y hashtags de nicho 
 
 IMPORTANTE: Devuelve ÚNICAMENTE los hashtags separados por espacios en una sola línea (por ejemplo: #Marketing #Publicidad #Ventas). No agregues introducciones, numeraciones, explicaciones ni comentarios de ningún tipo.
   `;
-  return await callGemini(prompt);
+  return await callGroq(prompt);
 }
 
-/**
- * Genera un calendario semanal de contenidos en formato JSON.
- */
 async function generateCalendarAI(product, platform, goal) {
   const prompt = `
 Eres un estratega de contenido de redes sociales experto.
@@ -127,13 +99,12 @@ Debes devolver obligatoriamente un array JSON con exactamente 7 objetos (uno par
     "caption": "Copy persuasivo listo para publicar con emojis y hashtags integrados",
     "visualIdea": "Descripción detallada de la imagen, gráfico o video corto a usar",
     "bestTime": "Hora recomendada de publicación"
-  },
-  ...
+  }
 ]
 
 IMPORTANTE: Devuelve ÚNICAMENTE el array JSON válido. No incluyas explicaciones previas ni posteriores, ni bloques de código de markdown como \`\`\`json. Solo el texto crudo del JSON.
   `;
-  return await callGemini(prompt, "application/json");
+  return await callGroq(prompt);
 }
 
 module.exports = {

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import CampaignForm from "../components/CampaignForm";
 import ResultCard from "../components/ResultCard";
+import Calendar from "../components/CalendarTable";
 import { 
   generateCampaign, 
   generateCopy, 
@@ -21,6 +22,18 @@ function Home() {
     audience: "",
     channel: ""
   });
+  
+  const today = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const toKey = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [calEvents, setCalEvents] = useState([
+    { date: "2026-06-10", title: "Campaña FB Ads", type: "purple" },
+    { date: "2026-06-18", title: "#TrendingNow", type: "coral" },
+  ]);
+  const [calModal, setCalModal] = useState(false);
+  const [calForm, setCalForm] = useState({ title: "", date: "", type: "purple" });
 
   // Cargar historial de localStorage al iniciar
   useEffect(() => {
@@ -134,7 +147,7 @@ function Home() {
             </div>
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem", fontSize: "0.85rem" }}>
-                <span>Precisión del Modelo (Gemini 2.5)</span>
+                <span>Precisión del Modelo (Gemini 3.5)</span>
                 <strong>98.4%</strong>
               </div>
               <div style={{ width: "100%", height: "6px", backgroundColor: "var(--bg-tertiary)", borderRadius: "3px", overflow: "hidden" }}>
@@ -174,6 +187,105 @@ function Home() {
       </div>
     </div>
   );
+
+const renderCalendar = () => {
+  const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const DAYS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
+    else setCalMonth(m => m + 1);
+  };
+  const openModal = (date = "") => {
+    const d = date || `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+    setCalForm({ title: "", date: d, type: "purple" });
+    setCalModal(true);
+  };
+  const saveEvent = () => {
+    if (!calForm.title.trim() || !calForm.date) return;
+    setCalEvents(prev => [...prev, { ...calForm }]);
+    const [y, m] = calForm.date.split("-");
+    setCalYear(parseInt(y));
+    setCalMonth(parseInt(m) - 1);
+    setCalModal(false);
+  };
+
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const daysInPrev = new Date(calYear, calMonth, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push({ day: daysInPrev - firstDay + i + 1, current: false });
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, current: true });
+
+  return (
+    <div className="cal-wrap">
+      <div className="cal-header">
+        <span className="cal-title">{MONTHS[calMonth]} {calYear}</span>
+        <div className="cal-nav">
+          <button className="cal-nav-btn" onClick={prevMonth}>&#8249;</button>
+          <button className="cal-nav-btn" onClick={nextMonth}>&#8250;</button>
+          <button className="cal-add-btn" onClick={() => openModal()}>+ Nuevo evento</button>
+        </div>
+      </div>
+
+      <div className="cal-days-header">
+        {DAYS.map(d => <div key={d} className="cal-day-label">{d}</div>)}
+      </div>
+
+      <div className="cal-grid">
+        {cells.map((cell, i) => {
+          const key = cell.current ? toKey(calYear, calMonth, cell.day) : null;
+          const isToday = cell.current && today.getFullYear() === calYear && today.getMonth() === calMonth && today.getDate() === cell.day;
+          const dayEvents = key ? calEvents.filter(e => e.date === key) : [];
+          return (
+            <div
+              key={i}
+              className={`cal-day${!cell.current ? " cal-other" : ""}${isToday ? " cal-today" : ""}`}
+              onClick={() => cell.current && openModal(key)}
+            >
+              <div className="cal-day-num">{cell.day}</div>
+              {dayEvents.map((ev, j) => (
+                <div key={j} className={`cal-pill cal-pill-${ev.type}`}>{ev.title}</div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      {calModal && (
+        <div className="cal-modal-overlay" onClick={() => setCalModal(false)}>
+          <div className="cal-modal" onClick={e => e.stopPropagation()}>
+            <div className="cal-modal-title">📅 Guardar evento</div>
+            <div className="cal-field">
+              <label className="cal-label">Título</label>
+              <input type="text" placeholder="Ej: Post Instagram" value={calForm.title} onChange={e => setCalForm(f => ({...f, title: e.target.value}))} />
+            </div>
+            <div className="cal-field">
+              <label className="cal-label">Fecha</label>
+              <input type="date" value={calForm.date} onChange={e => setCalForm(f => ({...f, date: e.target.value}))} />
+            </div>
+            <div className="cal-field">
+              <label className="cal-label">Categoría</label>
+              <select value={calForm.type} onChange={e => setCalForm(f => ({...f, type: e.target.value}))}>
+                <option value="purple">Campaña</option>
+                <option value="teal">Post orgánico</option>
+                <option value="coral">Hashtag / tendencia</option>
+              </select>
+            </div>
+            <div className="cal-modal-actions">
+              <button className="cal-btn-cancel" onClick={() => setCalModal(false)}>Cancelar</button>
+              <button className="cal-btn-save" onClick={saveEvent}>💾 Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
   const renderTrends = () => (
     <div className="section-card">
@@ -298,6 +410,8 @@ function Home() {
         {activeTab === "trends" && renderTrends()}
         
         {activeTab === "history" && renderHistory()}
+
+        {activeTab === "calendar" && renderCalendar ()}
 
         {(activeTab === "campaign" || activeTab === "copy" || activeTab === "hashtag") && (
           <>
