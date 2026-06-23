@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import CampaignForm from "../components/CampaignForm";
@@ -14,12 +15,14 @@ import {
   clearHistoryAPI,
   toggleFavoriteAPI,
   generateTrendsAPI,
+  refineContentAPI,
 } from "../services/campaignService";
 
 const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario" };
 
 function Home() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
@@ -49,6 +52,10 @@ function Home() {
   const [manualModal, setManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ title: "", description: "", color: "#f5b27a" });
   const [historyFilter, setHistoryFilter] = useState("all");
+  const [historySearch, setHistorySearch] = useState("");
+  const [refineModal, setRefineModal] = useState(null);
+  const [refineResult, setRefineResult] = useState("");
+  const [refineLoading, setRefineLoading] = useState(false);
   const [calAiForm, setCalAiForm] = useState({ product: "", platform: "Instagram", goal: "" });
   const [calAiLoading, setCalAiLoading] = useState(false);
 
@@ -57,7 +64,7 @@ function Home() {
       const data = await getHistory();
       setHistory(data.history);
     } catch (err) {
-      console.error("Error cargando historial:", err);
+      showToast("Error al cargar el historial", "error");
     }
   }, []);
 
@@ -74,9 +81,11 @@ function Home() {
       if (activeTab === "campaign") { response = await generateCampaign(formData); setResult(response.campaign); }
       else if (activeTab === "copy") { response = await generateCopy({ product: formData.product, audience: formData.audience }); setResult(response.copy); }
       else if (activeTab === "hashtag") { response = await generateHashtags({ product: formData.product }); setResult(response.hashtags); }
+      showToast("Contenido generado exitosamente", "success");
       await loadHistory();
     } catch (error) {
-      setResult("Ocurrió un error al generar el contenido. Verifica que el servidor esté corriendo.");
+      showToast("Error al generar contenido. Verifica que el servidor esté corriendo.", "error");
+      setResult("");
     } finally {
       setLoading(false);
     }
@@ -86,7 +95,8 @@ function Home() {
     try {
       const data = await toggleFavoriteAPI(id);
       setHistory((prev) => prev.map((item) => item._id === id ? { ...item, isFavorite: data.isFavorite } : item));
-    } catch (err) { console.error(err); }
+      showToast(data.isFavorite ? "Agregado a favoritos ⭐" : "Quitado de favoritos", "info");
+    } catch (err) { showToast("Error al actualizar favorito", "error"); }
   };
 
   const handleGenerateCalendarAI = async () => {
@@ -108,19 +118,51 @@ function Home() {
       setCalEvents((prev) => [...prev, ...newEvents]);
       const firstDate = newEvents[0]?.date.split("-");
       if (firstDate) { setCalYear(parseInt(firstDate[0])); setCalMonth(parseInt(firstDate[1]) - 1); }
+      showToast("Calendario generado y agregado ✓", "success");
       setActiveTab("calendar");
-    } catch (err) { console.error(err); }
+    } catch (err) { showToast("Error al generar el calendario", "error"); }
     finally { setCalAiLoading(false); }
   };
 
   const deleteHistoryItem = async (id) => {
-    try { await deleteHistoryItemAPI(id); setHistory((prev) => prev.filter((item) => item._id !== id)); }
-    catch (err) { console.error(err); }
+    try { await deleteHistoryItemAPI(id); setHistory((prev) => prev.filter((item) => item._id !== id)); showToast("Elemento eliminado", "info"); }
+    catch (err) { showToast("Error al eliminar", "error"); }
   };
 
   const clearHistory = async () => {
-    try { await clearHistoryAPI(); setHistory([]); }
-    catch (err) { console.error(err); }
+    try { await clearHistoryAPI(); setHistory([]); showToast("Historial limpiado", "info"); }
+    catch (err) { showToast("Error al limpiar historial", "error"); }
+  };
+
+  const handleRefine = async () => {
+    if (!refineModal) return;
+    setRefineLoading(true);
+    setRefineResult("");
+    try {
+      const data = await refineContentAPI(refineModal.type, refineModal.input, refineModal.output);
+      setRefineResult(data.refined);
+      showToast("¡Contenido perfeccionado con IA ✨", "success");
+      await loadHistory();
+    } catch (err) {
+      showToast("Error al perfeccionar el contenido", "error");
+    } finally {
+      setRefineLoading(false);
+    }
+  };
+
+  const handleCopyRefineResult = () => {
+    if (!refineResult) return;
+    navigator.clipboard.writeText(refineResult);
+    showToast("Resultado copiado ✓", "success");
+  };
+
+  const handleDownloadRefineResult = () => {
+    if (!refineResult) return;
+    const blob = new Blob([refineResult], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${refineModal.type}-perfeccionado-${Date.now()}.txt`; a.click();
+    URL.revokeObjectURL(url);
   };
 
   /* ── DASHBOARD EJECUTIVO ── */
@@ -382,7 +424,8 @@ function Home() {
     try {
       const data = await generateTrendsAPI(trendsTopic.trim());
       setTrends(data.trends.map((t, i) => ({ ...t, id: `ai-${Date.now()}-${i}` })));
-    } catch (err) { console.error(err); }
+      showToast("Tendencias generadas con IA ✓", "success");
+    } catch (err) { showToast("Error al generar tendencias", "error"); }
     finally { setTrendsLoading(false); }
   };
   const handleAddManualTrend = () => {
@@ -484,9 +527,10 @@ function Home() {
       { id: "hashtag", label: "Hashtags" }, { id: "calendar", label: "Calendarios" },
     ];
     const filtered = history.filter((item) => {
-      if (historyFilter === "all") return true;
-      if (historyFilter === "favorites") return item.isFavorite;
-      return item.type === historyFilter;
+      const matchesFilter = historyFilter === "all" ? true : historyFilter === "favorites" ? item.isFavorite : item.type === historyFilter;
+      const q = historySearch.toLowerCase();
+      const matchesSearch = !q || (item.input?.product || "").toLowerCase().includes(q) || (typeof item.output === "string" && item.output.toLowerCase().includes(q));
+      return matchesFilter && matchesSearch;
     });
     const filterBtnStyle = (id) => ({
       padding: "0.35rem 0.9rem", borderRadius: "50px", border: "1px solid", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", transition: "all 0.2s",
@@ -505,6 +549,23 @@ function Home() {
             </button>
           )}
         </div>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+            <svg style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", opacity: 0.4 }} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar por producto o contenido..."
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              style={{ width: "100%", paddingLeft: "2.2rem", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 0.9rem 0.55rem 2.2rem", color: "var(--text-main)", fontSize: "0.85rem", outline: "none" }}
+            />
+          </div>
+          {historySearch && (
+            <button onClick={() => setHistorySearch("")} style={{ fontSize: "0.78rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}>
+              Limpiar ✕
+            </button>
+          )}
+        </div>
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1.5rem" }}>
           {FILTERS.map((f) => (<button key={f.id} style={filterBtnStyle(f.id)} onClick={() => setHistoryFilter(f.id)}>{f.label}</button>))}
         </div>
@@ -517,7 +578,15 @@ function Home() {
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {filtered.map((item) => (
               <div key={item._id} style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.3)" : "var(--border-color)"}`, borderRadius: "var(--border-radius-md)", padding: "1.25rem 1.5rem", backgroundColor: "var(--bg-tertiary)", position: "relative" }}>
-                <div style={{ position: "absolute", top: "1rem", right: "1rem", display: "flex", gap: "0.5rem" }}>
+                <div style={{ position: "absolute", top: "1rem", right: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
+                    <button
+                      onClick={() => { setRefineModal(item); setRefineResult(""); }}
+                      title="Perfeccionar con IA"
+                      style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", color: "var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "0.25rem 0.65rem", fontSize: "0.72rem", fontWeight: "700", cursor: "pointer", whiteSpace: "nowrap" }}>
+                      ✨ Perfeccionar
+                    </button>
+                  )}
                   <button onClick={() => toggleFavorite(item._id)} title={item.isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
                     style={{ background: "transparent", border: "none", fontSize: "1.1rem", cursor: "pointer", lineHeight: 1, opacity: item.isFavorite ? 1 : 0.4 }}>
                     {item.isFavorite ? "⭐" : "☆"}
@@ -544,6 +613,67 @@ function Home() {
             ))}
           </div>
         )}
+
+      {refineModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}
+          onClick={() => setRefineModal(null)}>
+          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "2rem", width: "100%", maxWidth: "640px", maxHeight: "90vh", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+              <div>
+                <h3 style={{ color: "var(--text-active)", fontWeight: "800", fontSize: "1.1rem", marginBottom: "0.2rem" }}>✨ Perfeccionar con IA</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                  La IA mejorará este {TYPE_LABELS[refineModal.type] || refineModal.type} haciéndolo más persuasivo y profesional
+                </p>
+              </div>
+              <button onClick={() => setRefineModal(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>
+                Original — {refineModal.input?.product}
+              </p>
+              <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "1rem", fontSize: "0.83rem", color: "var(--text-soft)", lineHeight: "1.6", maxHeight: "160px", overflowY: "auto", whiteSpace: "pre-wrap" }}>
+                {Array.isArray(refineModal.output) ? refineModal.output.join(" ") : refineModal.output}
+              </div>
+            </div>
+
+            {!refineResult ? (
+              <button className="btn-primary" onClick={handleRefine} disabled={refineLoading} style={{ width: "100%", height: "46px", fontSize: "0.9rem" }}>
+                {refineLoading ? (
+                  <><span className="pulse-element">⏳</span>&nbsp; Perfeccionando con IA...</>
+                ) : "✨ Perfeccionar ahora"}
+              </button>
+            ) : (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                  <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                    ✨ Versión Perfeccionada
+                  </p>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button onClick={handleDownloadRefineResult}
+                      style={{ background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.3rem 0.7rem", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem" }}>
+                      ↓ .txt
+                    </button>
+                    <button onClick={handleCopyRefineResult}
+                      style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.3rem 0.8rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "600" }}>
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+                <div style={{ background: "var(--bg-tertiary)", border: "1px solid rgba(201,105,43,0.2)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.25rem", fontSize: "0.875rem", color: "var(--text-main)", lineHeight: "1.7", whiteSpace: "pre-wrap", maxHeight: "280px", overflowY: "auto" }}>
+                  {refineResult}
+                </div>
+                <button className="btn-primary" onClick={handleRefine} disabled={refineLoading}
+                  style={{ width: "100%", height: "40px", fontSize: "0.85rem", marginTop: "0.75rem", backgroundImage: "none", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", color: "var(--text-soft)" }}>
+                  Generar otra versión
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       </div>
     );
   };

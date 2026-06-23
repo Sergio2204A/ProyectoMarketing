@@ -9,6 +9,7 @@ const calendarRoutes = require("./routes/calendarRoutes");
 const authRoutes = require("./routes/authRoutes");
 const historyRoutes = require("./routes/historyRoutes");
 const trendsRoutes = require("./routes/trendsRoutes");
+const refineRoutes = require("./routes/refineRoutes");
 
 const connectDB = require("./db");
 
@@ -28,6 +29,7 @@ app.use("/hashtag", hashtagRoutes);
 app.use("/calendar", calendarRoutes);
 app.use("/history", historyRoutes);
 app.use("/trends", trendsRoutes);
+app.use("/refine", refineRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

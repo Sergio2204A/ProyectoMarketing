@@ -50,3 +50,8 @@ export const generateTrendsAPI = async (topic) => {
   const response = await axios.post(`${API_URL}/trends`, { topic }, { headers: authHeader() });
   return response.data;
 };
+
+export const refineContentAPI = async (type, input, output) => {
+  const response = await axios.post(`${API_URL}/refine`, { type, input, output }, { headers: authHeader() });
+  return response.data;
+};

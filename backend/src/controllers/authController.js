@@ -76,4 +76,28 @@ const getMe = async (req, res) => {
   });
 };
 
-module.exports = { register, login, getMe };
+// @desc  Actualizar perfil
+// @route PUT /auth/profile
+const updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("+password");
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+
+    if (req.body.name) user.name = req.body.name;
+    if (req.body.password) {
+      if (req.body.password.length < 6)
+        return res.status(400).json({ success: false, message: "La contraseña debe tener al menos 6 caracteres" });
+      user.password = req.body.password;
+    }
+
+    await user.save();
+    res.json({
+      success: true,
+      user: { id: user._id, name: user.name, email: user.email },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { register, login, getMe, updateProfile };

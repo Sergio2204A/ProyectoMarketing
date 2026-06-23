@@ -11,3 +11,10 @@ export const registerUser = async (name, email, password) => {
   const response = await axios.post(`${API_URL}/auth/register`, { name, email, password });
   return response.data;
 };
+
+export const updateProfile = async (token, data) => {
+  const response = await axios.put(`${API_URL}/auth/profile`, data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};

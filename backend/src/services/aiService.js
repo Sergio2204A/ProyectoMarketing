@@ -128,10 +128,50 @@ Usa colores variados y atractivos en hexadecimal para el campo color. Ejemplos: 
   return JSON.parse(clean);
 }
 
+async function refineContentAI(type, input, originalOutput) {
+  const typeLabels = { campaign: "campaña publicitaria", copy: "copy publicitario", hashtag: "set de hashtags" };
+  const typeLabel = typeLabels[type] || "contenido de marketing";
+
+  const outputText = Array.isArray(originalOutput)
+    ? originalOutput.join(" ")
+    : typeof originalOutput === "object"
+    ? JSON.stringify(originalOutput)
+    : originalOutput;
+
+  const inputContext = Object.entries(input || {})
+    .filter(([, v]) => v)
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join("\n");
+
+  const prompt = `
+Eres un director creativo de marketing con 20 años de experiencia en marcas globales.
+Se te entrega una ${typeLabel} que fue generada previamente. Tu misión es PERFECCIONARLA:
+hazla más persuasiva, más profesional, con mejor estructura, más memorable y de mayor impacto.
+
+CONTEXTO DEL PROYECTO:
+${inputContext}
+
+VERSIÓN ORIGINAL (mejora esto):
+${outputText}
+
+INSTRUCCIONES:
+- Mantén el mismo producto, objetivo y audiencia
+- Eleva el nivel creativo y la persuasión significativamente
+- Mejora el flujo, la estructura y el impacto emocional
+- Si es un copy, hazlo más directo y con mejor CTA
+- Si es una campaña, dale más profundidad estratégica
+- Si son hashtags, hazlos más virales y con mejor mezcla de alcance
+- Devuelve SOLO el contenido mejorado, sin explicaciones ni comentarios
+`;
+
+  return await callGroq(prompt);
+}
+
 module.exports = {
   generateCampaignAI,
   generateCopyAI,
   generateHashtagsAI,
   generateCalendarAI,
   generateTrendsAI,
+  refineContentAI,
 };
