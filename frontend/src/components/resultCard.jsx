@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useToast } from "../context/ToastContext";
 
 function ResultCard({ result, activeTab, loading }) {
+  const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -141,7 +143,7 @@ function ResultCard({ result, activeTab, loading }) {
                 }}
                 onClick={() => {
                   navigator.clipboard.writeText(tag);
-                  alert(`Copiado: ${tag}`);
+                  showToast(`Copiado: ${tag}`, "success");
                 }}
                 title="Haz clic para copiar este hashtag"
               >

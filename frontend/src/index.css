@@ -79,25 +79,6 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-.sidebar-logo {
-  font-size: 1.1rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, #f5b27a, #c9692b);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: -0.02em;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.sidebar-logo-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--accent-primary);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent-primary);
-  flex-shrink: 0;
-}
 
 .sidebar-section {
   padding: 1.2rem 1rem 0.4rem;

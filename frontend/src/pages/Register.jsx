@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import logo from "../assets/Softgic_Logo_White-scaled.png";
 
 function Register({ onSwitchToLogin }) {
   const { register } = useAuth();
@@ -27,7 +28,11 @@ function Register({ onSwitchToLogin }) {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <div style={styles.logo}>Marketing AI</div>
+        <div style={styles.logoWrap}>
+          <img src={logo} alt="Softgic" style={styles.logoImg} />
+          <span style={styles.logoSub}>Marketing AI</span>
+        </div>
+
         <h2 style={styles.title}>Crear cuenta</h2>
 
         <form onSubmit={handleSubmit} style={styles.form}>
@@ -84,70 +89,19 @@ function Register({ onSwitchToLogin }) {
 }
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "var(--bg-primary)",
-  },
-  card: {
-    backgroundColor: "var(--bg-secondary)",
-    border: "1px solid var(--border-color)",
-    borderRadius: "var(--border-radius-lg)",
-    padding: "2.5rem",
-    width: "100%",
-    maxWidth: "420px",
-  },
-  logo: {
-    fontSize: "1.3rem",
-    fontWeight: "700",
-    background: "linear-gradient(135deg, #f5b27a, #c9692b)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    marginBottom: "1.5rem",
-    textAlign: "center",
-  },
-  title: {
-    color: "var(--text-active)",
-    fontSize: "1.5rem",
-    fontWeight: "600",
-    marginBottom: "1.5rem",
-    textAlign: "center",
-  },
+  page: { minHeight: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--bg-primary)" },
+  card: { backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "2.5rem", width: "100%", maxWidth: "420px" },
+  logoWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: "0.4rem", marginBottom: "2rem" },
+  logoImg: { width: "150px", height: "auto", objectFit: "contain" },
+  logoSub: { fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.12em" },
+  title: { color: "var(--text-active)", fontSize: "1.4rem", fontWeight: "700", marginBottom: "1.5rem", textAlign: "center", letterSpacing: "-0.02em" },
   form: { display: "flex", flexDirection: "column", gap: "1rem" },
   field: { display: "flex", flexDirection: "column", gap: "0.4rem" },
-  label: { fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: "500" },
-  input: {
-    backgroundColor: "var(--bg-tertiary)",
-    border: "1px solid var(--border-color)",
-    borderRadius: "var(--border-radius-sm)",
-    padding: "0.75rem 1rem",
-    color: "var(--text-active)",
-    fontSize: "0.95rem",
-    outline: "none",
-  },
-  error: {
-    color: "#f87171",
-    fontSize: "0.85rem",
-    textAlign: "center",
-  },
-  switchText: {
-    color: "var(--text-muted)",
-    fontSize: "0.9rem",
-    textAlign: "center",
-    marginTop: "1.5rem",
-  },
-  link: {
-    background: "none",
-    border: "none",
-    color: "#f5b27a",
-    cursor: "pointer",
-    fontSize: "0.9rem",
-    fontWeight: "600",
-    padding: 0,
-  },
+  label: { fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em" },
+  input: { backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.75rem 1rem", color: "var(--text-active)", fontSize: "0.95rem", outline: "none" },
+  error: { color: "#f87171", fontSize: "0.85rem", textAlign: "center" },
+  switchText: { color: "var(--text-muted)", fontSize: "0.875rem", textAlign: "center", marginTop: "1.5rem" },
+  link: { background: "none", border: "none", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600", padding: 0 },
 };
 
 export default Register;
