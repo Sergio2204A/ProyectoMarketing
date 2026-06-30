@@ -1,21 +1,22 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { forgotPasswordAPI } from "../services/authService";
 import logo from "../assets/Softgic_Logo_White-scaled.png";
 
-function Login({ onSwitchToRegister, onForgotPassword }) {
-  const { login } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "" });
+function ForgotPassword({ onBackToLogin }) {
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await login(form.email, form.password);
+      await forgotPasswordAPI(email.trim());
+      setSent(true);
     } catch (err) {
-      setError(err.response?.data?.message || "Credenciales incorrectas");
+      setError(err.response?.data?.message || "No se pudo enviar el correo de recuperación");
     } finally {
       setLoading(false);
     }
@@ -29,51 +30,47 @@ function Login({ onSwitchToRegister, onForgotPassword }) {
           <span style={styles.logoSub}>Marketing AI</span>
         </div>
 
-        <h2 style={styles.title}>Iniciar sesión</h2>
+        <h2 style={styles.title}>Recuperar contraseña</h2>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.field}>
-            <label style={styles.label}>Email</label>
-            <input
-              type="email"
-              placeholder="tu@email.com"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              style={styles.input}
-              required
-            />
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Contraseña</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              style={styles.input}
-              required
-            />
-          </div>
-
-          {error && <p style={styles.error}>{error}</p>}
-
-          <button type="submit" className="btn-primary" disabled={loading} style={{ width: "100%", marginTop: "0.5rem" }}>
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
-
-          <p style={{ ...styles.switchText, marginTop: "0.25rem" }}>
-            <button type="button" onClick={onForgotPassword} style={styles.link}>
-              ¿Olvidaste tu contraseña?
+        {sent ? (
+          <div style={{ textAlign: "center" }}>
+            <p style={{ color: "var(--text-soft)", fontSize: "0.9rem", lineHeight: "1.6", marginBottom: "1.5rem" }}>
+              Si el email <strong>{email}</strong> existe en nuestro sistema, te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada (y spam).
+            </p>
+            <button onClick={onBackToLogin} className="btn-primary" style={{ width: "100%" }}>
+              Volver a iniciar sesión
             </button>
-          </p>
-        </form>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={styles.form}>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: "1.6", marginBottom: "0.25rem" }}>
+              Escribe tu email y te enviaremos un enlace para crear una nueva contraseña.
+            </p>
+            <div style={styles.field}>
+              <label style={styles.label}>Email</label>
+              <input
+                type="email"
+                placeholder="tu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={styles.input}
+                required
+              />
+            </div>
 
-        <p style={styles.switchText}>
-          ¿No tienes cuenta?{" "}
-          <button onClick={onSwitchToRegister} style={styles.link}>
-            Regístrate gratis
-          </button>
-        </p>
+            {error && <p style={styles.error}>{error}</p>}
+
+            <button type="submit" className="btn-primary" disabled={loading} style={{ width: "100%", marginTop: "0.5rem" }}>
+              {loading ? "Enviando..." : "Enviar enlace de recuperación"}
+            </button>
+
+            <p style={styles.switchText}>
+              <button type="button" onClick={onBackToLogin} style={styles.link}>
+                ← Volver a iniciar sesión
+              </button>
+            </p>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -95,4 +92,4 @@ const styles = {
   link: { background: "none", border: "none", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600", padding: 0 },
 };
 
-export default Login;
+export default ForgotPassword;

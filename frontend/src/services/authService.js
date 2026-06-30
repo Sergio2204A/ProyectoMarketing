@@ -18,3 +18,13 @@ export const updateProfile = async (token, data) => {
   });
   return response.data;
 };
+
+export const forgotPasswordAPI = async (email) => {
+  const response = await axios.post(`${API_URL}/auth/forgot-password`, { email });
+  return response.data;
+};
+
+export const resetPasswordAPI = async (token, password) => {
+  const response = await axios.post(`${API_URL}/auth/reset-password/${token}`, { password });
+  return response.data;
+};

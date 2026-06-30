@@ -1,21 +1,34 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { resetPasswordAPI } from "../services/authService";
 import logo from "../assets/Softgic_Logo_White-scaled.png";
 
-function Login({ onSwitchToRegister, onForgotPassword }) {
-  const { login } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "" });
+function ResetPassword({ token, onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
+
     setLoading(true);
     try {
-      await login(form.email, form.password);
+      const data = await resetPasswordAPI(token, password);
+      localStorage.setItem("auth_token", data.token);
+      localStorage.setItem("auth_user", JSON.stringify(data.user));
+      window.location.href = "/";
     } catch (err) {
-      setError(err.response?.data?.message || "Credenciales incorrectas");
+      setError(err.response?.data?.message || "El enlace es inválido o ya expiró");
     } finally {
       setLoading(false);
     }
@@ -29,27 +42,27 @@ function Login({ onSwitchToRegister, onForgotPassword }) {
           <span style={styles.logoSub}>Marketing AI</span>
         </div>
 
-        <h2 style={styles.title}>Iniciar sesión</h2>
+        <h2 style={styles.title}>Crear nueva contraseña</h2>
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.field}>
-            <label style={styles.label}>Email</label>
+            <label style={styles.label}>Nueva contraseña</label>
             <input
-              type="email"
-              placeholder="tu@email.com"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               style={styles.input}
               required
             />
           </div>
           <div style={styles.field}>
-            <label style={styles.label}>Contraseña</label>
+            <label style={styles.label}>Confirmar contraseña</label>
             <input
               type="password"
               placeholder="••••••••"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               style={styles.input}
               required
             />
@@ -58,22 +71,15 @@ function Login({ onSwitchToRegister, onForgotPassword }) {
           {error && <p style={styles.error}>{error}</p>}
 
           <button type="submit" className="btn-primary" disabled={loading} style={{ width: "100%", marginTop: "0.5rem" }}>
-            {loading ? "Entrando..." : "Entrar"}
+            {loading ? "Guardando..." : "Restablecer contraseña"}
           </button>
 
-          <p style={{ ...styles.switchText, marginTop: "0.25rem" }}>
-            <button type="button" onClick={onForgotPassword} style={styles.link}>
-              ¿Olvidaste tu contraseña?
+          <p style={styles.switchText}>
+            <button type="button" onClick={onDone} style={styles.link}>
+              ← Volver a iniciar sesión
             </button>
           </p>
         </form>
-
-        <p style={styles.switchText}>
-          ¿No tienes cuenta?{" "}
-          <button onClick={onSwitchToRegister} style={styles.link}>
-            Regístrate gratis
-          </button>
-        </p>
       </div>
     </div>
   );
@@ -95,4 +101,4 @@ const styles = {
   link: { background: "none", border: "none", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600", padding: 0 },
 };
 
-export default Login;
+export default ResetPassword;

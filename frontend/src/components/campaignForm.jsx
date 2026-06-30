@@ -95,6 +95,34 @@ function CampaignForm({ activeTab, formData, handleChange, handleGenerate, loadi
           </div>
         )}
 
+        {/* País objetivo */}
+        <div className="form-group">
+          <label htmlFor="country">País objetivo <span style={{ fontWeight: 400, opacity: 0.6 }}>(opcional)</span></label>
+          <input
+            id="country"
+            type="text"
+            name="country"
+            value={formData.country || ""}
+            placeholder="Ej: Colombia, México"
+            onChange={handleChange}
+            disabled={loading}
+          />
+        </div>
+
+        {/* Región específica */}
+        <div className="form-group">
+          <label htmlFor="region">Región específica <span style={{ fontWeight: 400, opacity: 0.6 }}>(opcional)</span></label>
+          <input
+            id="region"
+            type="text"
+            name="region"
+            value={formData.region || ""}
+            placeholder="Ej: Medellín, Barranquilla"
+            onChange={handleChange}
+            disabled={loading}
+          />
+        </div>
+
         <button
           className="btn-primary"
           onClick={handleGenerate}

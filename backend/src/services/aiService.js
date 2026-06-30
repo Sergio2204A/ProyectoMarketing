@@ -38,7 +38,17 @@ async function callGroq(prompt) {
   return generatedText.trim();
 }
 
-async function generateCampaignAI(product, goal, audience, channel) {
+async function generateCampaignAI(product, goal, audience, channel, country, region) {
+  const locationContext = country
+    ? `- País objetivo: ${country}${region ? `\n- Región específica: ${region}` : ""}`
+    : "";
+
+  const locationInstruction = region
+    ? `IMPORTANTE: Adapta completamente el tono, los modismos, las referencias culturales y el lenguaje al estilo propio de la región "${region}" dentro de ${country || "ese país"}. El contenido debe sentirse 100% local y auténtico para esa región.`
+    : country
+    ? `IMPORTANTE: Adapta el tono y las referencias culturales para resonar con el público de ${country}.`
+    : "";
+
   const prompt = `
 Eres un experto en marketing digital y redactor publicitario estrella.
 Genera una campaña publicitaria de alta conversión y estructurada profesionalmente con la siguiente información:
@@ -47,6 +57,9 @@ Genera una campaña publicitaria de alta conversión y estructurada profesionalm
 - Objetivo de la Campaña: ${goal}
 - Público Objetivo: ${audience}
 - Canal de Distribución: ${channel}
+${locationContext}
+
+${locationInstruction}
 
 Por favor, estructura tu respuesta utilizando Markdown con emojis atractivos. La estructura debe incluir:
 1. **Título de la Campaña** (debe ser llamativo)
@@ -58,11 +71,24 @@ Por favor, estructura tu respuesta utilizando Markdown con emojis atractivos. La
   return await callGroq(prompt);
 }
 
-async function generateCopyAI(product, audience) {
+async function generateCopyAI(product, audience, country, region) {
+  const locationContext = country
+    ? `- País objetivo: ${country}${region ? `\n- Región específica: ${region}` : ""}`
+    : "";
+
+  const locationInstruction = region
+    ? `IMPORTANTE: Escribe en el tono, jerga y estilo cultural propio de la región "${region}"${country ? ` en ${country}` : ""}. Usa expresiones, modismos y referencias que resuenen específicamente con esa región.`
+    : country
+    ? `IMPORTANTE: Adapta el lenguaje y tono para conectar culturalmente con el público de ${country}.`
+    : "";
+
   const prompt = `
 Eres un copywriter profesional experto en neuro-ventas.
 Crea 3 variaciones de copys publicitarios persuasivos, atractivos y listos para publicar en redes sociales para promocionar el producto/servicio: "${product}".
 El público objetivo al que te diriges es: "${audience}".
+${locationContext}
+
+${locationInstruction}
 
 Usa una de las siguientes fórmulas clásicas de copywriting para cada variación y nómbrala antes de presentarla (ej: "Variación 1 (Fórmula AIDA)"):
 - Variación 1: Fórmula AIDA (Atención, Interés, Deseo, Acción)
@@ -74,10 +100,16 @@ Usa emojis, espaciados limpios y llamadas a la acción (CTA) súper atractivas.
   return await callGroq(prompt);
 }
 
-async function generateHashtagsAI(product) {
+async function generateHashtagsAI(product, country, region) {
+  const locationInstruction = region
+    ? `Incluye hashtags locales y populares específicos de la región "${region}"${country ? ` en ${country}` : ""}, además de los genéricos. Los hashtags regionales deben reflejar la cultura y terminología propia de esa zona.`
+    : country
+    ? `Incluye hashtags populares y relevantes usados en ${country}, además de los internacionales.`
+    : "Incluye una mezcla de hashtags de gran alcance (genéricos) y hashtags de nicho (específicos).";
+
   const prompt = `
 Genera una lista de hashtags relevantes, populares y estratégicos en redes sociales para promocionar el siguiente producto o tema: "${product}".
-Incluye una mezcla de hashtags de gran alcance (genéricos) y hashtags de nicho (específicos).
+${locationInstruction}
 
 IMPORTANTE: Devuelve ÚNICAMENTE los hashtags separados por espacios en una sola línea (por ejemplo: #Marketing #Publicidad #Ventas). No agregues introducciones, numeraciones, explicaciones ni comentarios de ningún tipo.
   `;
@@ -123,6 +155,54 @@ Devuelve ÚNICAMENTE un array JSON válido con exactamente 6 objetos, sin explic
 
 Usa colores variados y atractivos en hexadecimal para el campo color. Ejemplos: #a5b4fc, #38bdf8, #34d399, #fb923c, #f472b6, #facc15.
   `;
+  const raw = await callGroq(prompt);
+  const clean = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/, "").trim();
+  return JSON.parse(clean);
+}
+
+async function generateVideoScriptAI(product, format, duration, goal, audience, country, region) {
+  const locationContext = country
+    ? `- País objetivo: ${country}${region ? `\n- Región específica: ${region}` : ""}`
+    : "";
+
+  const locationInstruction = region
+    ? `Adapta el tono, expresiones y referencias culturales al estilo propio de "${region}"${country ? ` en ${country}` : ""}.`
+    : country
+    ? `Adapta el lenguaje y referencias para conectar con el público de ${country}.`
+    : "";
+
+  const prompt = `
+Eres un director creativo y guionista de video viral especializado en redes sociales.
+Crea un script de video completo y listo para grabar con esta información:
+
+- Producto/Servicio: ${product}
+- Formato: ${format}
+- Duración objetivo: ${duration}
+- Objetivo del video: ${goal}
+- Público objetivo: ${audience}
+${locationContext}
+
+${locationInstruction}
+
+Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin explicaciones ni bloques markdown:
+{
+  "hook": "Frase de apertura que engancha en los primeros 3 segundos (impactante e intrigante)",
+  "scenes": [
+    {
+      "time": "0-5s",
+      "visual": "Descripción detallada de lo que se ve en cámara",
+      "narration": "Lo que dice el locutor o el texto en pantalla",
+      "transition": "Tipo de corte o transición (ej: corte seco, zoom rápido, fade)"
+    }
+  ],
+  "caption": "Caption completo listo para publicar con emojis y hashtags integrados",
+  "cta": "Llamada a la acción final para mostrar en pantalla o decir al cierre",
+  "musicTip": "Tipo de música o sonido recomendado (ej: beat energético, música lo-fi, trending audio)",
+  "productionTips": "3 consejos rápidos de producción separados por punto y coma"
+}
+
+Genera entre 4 y 7 escenas según la duración. Que sea viral, profesional y que enganche desde el primer segundo.
+`;
   const raw = await callGroq(prompt);
   const clean = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/, "").trim();
   return JSON.parse(clean);
@@ -174,4 +254,5 @@ module.exports = {
   generateCalendarAI,
   generateTrendsAI,
   refineContentAI,
+  generateVideoScriptAI,
 };

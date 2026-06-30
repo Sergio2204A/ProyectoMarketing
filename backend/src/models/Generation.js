@@ -9,7 +9,7 @@ const GenerationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["campaign", "copy", "hashtag", "calendar"],
+      enum: ["campaign", "copy", "hashtag", "calendar", "video"],
       required: true,
     },
     input: {
@@ -23,6 +23,10 @@ const GenerationSchema = new mongoose.Schema(
     isFavorite: {
       type: Boolean,
       default: false,
+    },
+    imageUrl: {
+      type: String,
+      default: null,
     },
   },
   {

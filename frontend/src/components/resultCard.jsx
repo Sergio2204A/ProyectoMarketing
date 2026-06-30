@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { useToast } from "../context/ToastContext";
 
-function ResultCard({ result, activeTab, loading }) {
+function ResultCard({ result, activeTab, loading, generationId, onFavorite, onPublish }) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  const handleFavorite = async () => {
+    if (!generationId) return;
+    const next = !isFavorite;
+    setIsFavorite(next);
+    await onFavorite(generationId);
+  };
 
   const handleCopy = () => {
     if (!result) return;
@@ -31,7 +39,6 @@ function ResultCard({ result, activeTab, loading }) {
     
     return text.split("\n").map((line, index) => {
       let trimmed = line.trim();
-      
       // Títulos principales: ### Título o 1. **Título**
       if (trimmed.startsWith("###")) {
         return <h3 key={index} style={{ color: "var(--text-active)", marginTop: "1.2rem", marginBottom: "0.5rem", fontSize: "1.2rem" }}>{trimmed.replace(/###\s*/, "")}</h3>;
@@ -83,13 +90,29 @@ function ResultCard({ result, activeTab, loading }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
         <h2 className="section-title" style={{ margin: 0 }}>Resultado de la Inteligencia Artificial</h2>
         {hasContent && !loading && (
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {generationId && (
+            <button
+              onClick={handleFavorite}
+              title={isFavorite ? "Quitar de favoritos" : "Guardar en favoritos"}
+              style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: isFavorite ? "rgba(250,204,21,0.1)" : "transparent", border: `1px solid ${isFavorite ? "rgba(250,204,21,0.4)" : "rgba(255,255,255,0.1)"}`, borderRadius: "var(--border-radius-md)", color: isFavorite ? "#fbbf24" : "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", transition: "all 0.2s" }}
+            >
+              {isFavorite ? "★" : "☆"} Favorito
+            </button>
+          )}
           <button
             onClick={handleDownload}
-            style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+            style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             .txt
+          </button>
+          <button
+            onClick={onPublish}
+            style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.4)", borderRadius: "var(--border-radius-md)", color: "var(--accent-secondary)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: "600" }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            Publicar
           </button>
           <button
             className="btn-primary"

@@ -55,3 +55,23 @@ export const refineContentAPI = async (type, input, output) => {
   const response = await axios.post(`${API_URL}/refine`, { type, input, output }, { headers: authHeader() });
   return response.data;
 };
+
+export const updateImageUrlAPI = async (id, imageUrl) => {
+  const response = await axios.patch(`${API_URL}/history/${id}/image`, { imageUrl }, { headers: authHeader() });
+  return response.data;
+};
+
+export const generateVideoScriptAPI = async (data) => {
+  const response = await axios.post(`${API_URL}/video`, data, { headers: authHeader() });
+  return response.data;
+};
+
+export const generateRealVideoAPI = async (data) => {
+  const response = await axios.post(`${API_URL}/video/real`, data, { headers: authHeader() });
+  return response.data;
+};
+
+export const getRealVideoStatusAPI = async (taskId) => {
+  const response = await axios.get(`${API_URL}/video/real/${taskId}`, { headers: authHeader() });
+  return response.data;
+};

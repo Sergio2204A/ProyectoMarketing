@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import CampaignForm from "../components/CampaignForm";
 import ResultCard from "../components/ResultCard";
+import PublishModal from "../components/PublishModal";
+import { getSocialCredentialsAPI, saveSocialCredentialsAPI, disconnectSocialAPI } from "../services/publishService";
 import {
   generateCampaign,
   generateCopy,
@@ -16,9 +18,13 @@ import {
   toggleFavoriteAPI,
   generateTrendsAPI,
   refineContentAPI,
+  updateImageUrlAPI,
+  generateVideoScriptAPI,
+  generateRealVideoAPI,
+  getRealVideoStatusAPI,
 } from "../services/campaignService";
 
-const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario" };
+const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario", video: "Video Script" };
 
 function Home() {
   const { user } = useAuth();
@@ -26,8 +32,13 @@ function Home() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
+  const [generationId, setGenerationId] = useState(null);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
   const [history, setHistory] = useState([]);
-  const [formData, setFormData] = useState({ product: "", goal: "", audience: "", channel: "" });
+  const [formData, setFormData] = useState({ product: "", goal: "", audience: "", channel: "", country: "", region: "" });
 
   const today = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -56,8 +67,41 @@ function Home() {
   const [refineModal, setRefineModal] = useState(null);
   const [refineResult, setRefineResult] = useState("");
   const [refineLoading, setRefineLoading] = useState(false);
+  const [detailModal, setDetailModal] = useState(null);
+  const [detailImageUrl, setDetailImageUrl] = useState(null);
+  const [detailImageLoading, setDetailImageLoading] = useState(false);
+  const [detailImageError, setDetailImageError] = useState(false);
+  const [detailImagePrompt, setDetailImagePrompt] = useState("");
+  const [detailVideoForm, setDetailVideoForm] = useState({ format: "Reel de Instagram", duration: "30 segundos" });
+  const [detailVideoResult, setDetailVideoResult] = useState(null);
+  const [detailVideoLoading, setDetailVideoLoading] = useState(false);
+  const [publishModalOpen, setPublishModalOpen] = useState(null);
+  const [socialCreds, setSocialCreds] = useState({ facebook: { connected: false }, instagram: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } });
+  const [socialLoadingCreds, setSocialLoadingCreds] = useState(false);
+  const [socialOpenForm, setSocialOpenForm] = useState(null);
+  const [socialForm, setSocialForm] = useState({});
+  const [socialSaving, setSocialSaving] = useState(false);
+  const [socialDisconnecting, setSocialDisconnecting] = useState(null);
+  const [socialShowInstructions, setSocialShowInstructions] = useState(null);
   const [calAiForm, setCalAiForm] = useState({ product: "", platform: "Instagram", goal: "" });
   const [calAiLoading, setCalAiLoading] = useState(false);
+
+  const [videoForm, setVideoForm] = useState({ product: "", format: "Reel de Instagram", duration: "30 segundos", goal: "", audience: "" });
+  const [videoResult, setVideoResult] = useState(null);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoGenerationId, setVideoGenerationId] = useState(null);
+
+  const [realVideoDuration, setRealVideoDuration] = useState(5);
+  const [realVideoStatus, setRealVideoStatus] = useState("idle"); // idle | starting | processing | done | error
+  const [realVideoUrl, setRealVideoUrl] = useState(null);
+  const [realVideoError, setRealVideoError] = useState("");
+  const realVideoPollRef = useRef(null);
+
+  const [inlineVideoForm, setInlineVideoForm] = useState({ format: "Reel de Instagram", duration: "30 segundos" });
+  const [inlineVideoResult, setInlineVideoResult] = useState(null);
+  const [inlineVideoLoading, setInlineVideoLoading] = useState(false);
+
+  const prevTabRef = useRef(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -69,18 +113,34 @@ function Home() {
   }, []);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
-  useEffect(() => { setResult(""); }, [activeTab]);
+  useEffect(() => { if (activeTab === "social") loadSocialCreds(); }, [activeTab]);
+  useEffect(() => {
+    const prevTab = prevTabRef.current;
+    prevTabRef.current = activeTab;
+    const GEN_TABS = new Set(["campaign", "copy", "hashtag", "video"]);
+    // Solo limpia el resultado al cambiar ENTRE tabs de generación (ej: campaign→copy)
+    // Si el usuario va a social/dashboard/calendar y vuelve, el resultado se preserva
+    if (GEN_TABS.has(prevTab) && GEN_TABS.has(activeTab) && prevTab !== activeTab) {
+      setResult(""); setGenerationId(null); setImageUrl(null); setImageError(false); setImagePrompt("");
+      setVideoResult(null); setVideoGenerationId(null);
+    }
+  }, [activeTab]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleGenerate = async () => {
     setLoading(true);
     setResult("");
+    setGenerationId(null);
+    setImageUrl(null);
+    setImageError(false);
+    setInlineVideoResult(null);
     try {
       let response;
       if (activeTab === "campaign") { response = await generateCampaign(formData); setResult(response.campaign); }
       else if (activeTab === "copy") { response = await generateCopy({ product: formData.product, audience: formData.audience }); setResult(response.copy); }
       else if (activeTab === "hashtag") { response = await generateHashtags({ product: formData.product }); setResult(response.hashtags); }
+      setGenerationId(response?.generationId || null);
       showToast("Contenido generado exitosamente", "success");
       await loadHistory();
     } catch (error) {
@@ -147,6 +207,219 @@ function Home() {
       showToast("Error al perfeccionar el contenido", "error");
     } finally {
       setRefineLoading(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    setImageUrl(null);
+    setImageError(false);
+    setImageLoading(true);
+    let prompt;
+    if (imagePrompt.trim()) {
+      prompt = `${imagePrompt.trim()}, professional marketing photo, no text, no watermark, no letters, high quality, 4k`;
+    } else {
+      const parts = [
+        `professional marketing advertisement for ${formData.product}`,
+        formData.goal ? `goal: ${formData.goal}` : "",
+        formData.audience ? `target audience: ${formData.audience}` : "",
+        formData.channel ? `for ${formData.channel}` : "",
+        "modern commercial photography, vibrant colors, clean layout, high quality, 4k, professional brand design, no text, no letters, no watermark",
+      ].filter(Boolean);
+      prompt = parts.join(", ");
+    }
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=576&nologo=true&model=flux&seed=${Date.now()}`;
+    setImageUrl(url);
+
+    if (generationId) {
+      try {
+        await updateImageUrlAPI(String(generationId), url);
+        setHistory((prev) =>
+          prev.map((item) =>
+            String(item._id) === String(generationId) ? { ...item, imageUrl: url } : item
+          )
+        );
+      } catch (err) {
+        showToast("No se pudo guardar la imagen en el historial", "error");
+      }
+    }
+  };
+
+  const handleImageLoaded = () => {
+    setImageLoading(false);
+  };
+
+  const openDetailModal = (item) => {
+    setDetailModal(item);
+    setDetailImageUrl(item.imageUrl || null);
+    setDetailImagePrompt("");
+    setDetailImageError(false);
+    setDetailImageLoading(false);
+    setDetailVideoResult(null);
+    setDetailVideoLoading(false);
+  };
+
+  const closeDetailModal = () => {
+    setDetailModal(null);
+    setDetailImageUrl(null);
+    setDetailImagePrompt("");
+    setDetailImageError(false);
+    setDetailVideoResult(null);
+  };
+
+  const handleGenerateDetailImage = () => {
+    setDetailImageError(false);
+    setDetailImageLoading(true);
+    const input = detailModal?.input || {};
+    let prompt;
+    if (detailImagePrompt.trim()) {
+      prompt = `${detailImagePrompt.trim()}, professional marketing photo, no text, no watermark, no letters, high quality, 4k`;
+    } else {
+      const parts = [
+        `professional marketing advertisement for ${input.product}`,
+        input.goal ? `goal: ${input.goal}` : "",
+        input.audience ? `target audience: ${input.audience}` : "",
+        input.channel ? `for ${input.channel}` : "",
+        "modern commercial photography, vibrant colors, clean layout, high quality, 4k, professional brand design, no text, no letters, no watermark",
+      ].filter(Boolean);
+      prompt = parts.join(", ");
+    }
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=576&nologo=true&model=flux&seed=${Date.now()}`;
+    setDetailImageUrl(url);
+    updateImageUrlAPI(String(detailModal._id), url)
+      .then(() => setHistory((prev) => prev.map((h) => h._id === detailModal._id ? { ...h, imageUrl: url } : h)))
+      .catch(() => showToast("No se pudo guardar la imagen", "error"));
+  };
+
+  const handleDownloadDetailImage = async () => {
+    if (!detailImageUrl) return;
+    try {
+      const res = await fetch(detailImageUrl);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `imagen-${detailModal?.input?.product || "campaña"}-${Date.now()}.jpg`;
+      a.click();
+    } catch { showToast("Error al descargar la imagen", "error"); }
+  };
+
+  const handleGenerateDetailVideo = async () => {
+    setDetailVideoLoading(true);
+    setDetailVideoResult(null);
+    try {
+      const input = detailModal?.input || {};
+      const data = await generateVideoScriptAPI({
+        product: input.product,
+        format: detailVideoForm.format,
+        duration: detailVideoForm.duration,
+        goal: input.goal || "generar engagement y ventas",
+        audience: input.audience || "público general",
+        country: input.country,
+        region: input.region,
+      });
+      setDetailVideoResult(data.script);
+      showToast("Script de video generado ✓", "success");
+      await loadHistory();
+    } catch {
+      showToast("Error al generar el script de video", "error");
+    } finally {
+      setDetailVideoLoading(false);
+    }
+  };
+
+  const handleDownloadDetailVideo = () => {
+    if (!detailVideoResult) return;
+    const input = detailModal?.input || {};
+    const lines = [
+      `SCRIPT DE VIDEO — ${input.product}`,
+      `Formato: ${detailVideoForm.format} | Duración: ${detailVideoForm.duration}`,
+      "",
+      `🎣 HOOK: ${detailVideoResult.hook}`,
+      "",
+      "🎬 ESCENAS:",
+      ...(detailVideoResult.scenes || []).map((s, i) =>
+        `  Escena ${i + 1} (${s.time})\n  Visual: ${s.visual}\n  Narración: ${s.narration}\n  Transición: ${s.transition}`
+      ),
+      "",
+      `📝 CAPTION:\n${detailVideoResult.caption}`,
+      "",
+      `🚀 CTA: ${detailVideoResult.cta}`,
+      "",
+      `🎵 MÚSICA: ${detailVideoResult.musicTip}`,
+      "",
+      `💡 TIPS:\n${detailVideoResult.productionTips}`,
+    ].join("\n");
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `video-script-${input.product}-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateInlineVideo = async () => {
+    setInlineVideoLoading(true);
+    setInlineVideoResult(null);
+    try {
+      const data = await generateVideoScriptAPI({
+        product: formData.product,
+        format: inlineVideoForm.format,
+        duration: inlineVideoForm.duration,
+        goal: formData.goal || "generar engagement y ventas",
+        audience: formData.audience || "público general",
+        country: formData.country,
+        region: formData.region,
+      });
+      setInlineVideoResult(data.script);
+      showToast("Script de video generado ✓", "success");
+      await loadHistory();
+    } catch {
+      showToast("Error al generar el script de video", "error");
+    } finally {
+      setInlineVideoLoading(false);
+    }
+  };
+
+  const handleDownloadInlineVideo = () => {
+    if (!inlineVideoResult) return;
+    const lines = [
+      `SCRIPT DE VIDEO — ${formData.product}`,
+      `Formato: ${inlineVideoForm.format} | Duración: ${inlineVideoForm.duration}`,
+      "",
+      `🎣 HOOK: ${inlineVideoResult.hook}`,
+      "",
+      "🎬 ESCENAS:",
+      ...(inlineVideoResult.scenes || []).map((s, i) =>
+        `  Escena ${i + 1} (${s.time})\n  Visual: ${s.visual}\n  Narración: ${s.narration}\n  Transición: ${s.transition}`
+      ),
+      "",
+      `📝 CAPTION:\n${inlineVideoResult.caption}`,
+      "",
+      `🚀 CTA: ${inlineVideoResult.cta}`,
+      "",
+      `🎵 MÚSICA: ${inlineVideoResult.musicTip}`,
+      "",
+      `💡 TIPS:\n${inlineVideoResult.productionTips}`,
+    ].join("\n");
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `video-script-${formData.product}-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadImage = async () => {
+    try {
+      const res = await fetch(imageUrl);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `imagen-${formData.product || "campaña"}-${Date.now()}.jpg`;
+      a.click();
+    } catch {
+      showToast("Error al descargar la imagen", "error");
     }
   };
 
@@ -242,6 +515,9 @@ function Home() {
               </button>
               <button className="quick-action-btn" onClick={() => setActiveTab("trends")}>
                 <span className="quick-action-icon">📈</span>Tendencias
+              </button>
+              <button className="quick-action-btn" onClick={() => setActiveTab("video")}>
+                <span className="quick-action-icon">🎬</span>Video Script
               </button>
               <button className="quick-action-btn" onClick={() => setActiveTab("history")}>
                 <span className="quick-action-icon">🕒</span>Historial
@@ -417,6 +693,289 @@ function Home() {
     );
   };
 
+  /* ── VIDEO SCRIPT ── */
+  const handleGenerateVideo = async () => {
+    if (!videoForm.product.trim() || !videoForm.goal.trim() || !videoForm.audience.trim()) return;
+    setVideoLoading(true);
+    setVideoResult(null);
+    setVideoGenerationId(null);
+    try {
+      const data = await generateVideoScriptAPI(videoForm);
+      setVideoResult(data.script);
+      setVideoGenerationId(data.generationId);
+      showToast("Script de video generado ✓", "success");
+      await loadHistory();
+    } catch (err) {
+      showToast("Error al generar el script de video", "error");
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const handleDownloadVideoScript = () => {
+    if (!videoResult) return;
+    const lines = [
+      `SCRIPT DE VIDEO — ${videoForm.product}`,
+      `Formato: ${videoForm.format} | Duración: ${videoForm.duration}`,
+      `Objetivo: ${videoForm.goal} | Público: ${videoForm.audience}`,
+      "",
+      `🎣 HOOK: ${videoResult.hook}`,
+      "",
+      "🎬 ESCENAS:",
+      ...(videoResult.scenes || []).map((s, i) =>
+        `  Escena ${i + 1} (${s.time})\n  📷 Visual: ${s.visual}\n  🎤 Narración: ${s.narration}\n  ✂️ Transición: ${s.transition}`
+      ),
+      "",
+      `📝 CAPTION:\n${videoResult.caption}`,
+      "",
+      `🚀 CTA: ${videoResult.cta}`,
+      "",
+      `🎵 MÚSICA: ${videoResult.musicTip}`,
+      "",
+      `💡 TIPS DE PRODUCCIÓN:\n${videoResult.productionTips}`,
+    ].join("\n");
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `video-script-${videoForm.product}-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const pollRealVideo = (taskId) => {
+    realVideoPollRef.current = setInterval(async () => {
+      try {
+        const data = await getRealVideoStatusAPI(taskId);
+        if (data.status === "SUCCEEDED") {
+          clearInterval(realVideoPollRef.current);
+          setRealVideoUrl(data.videoUrl);
+          setRealVideoStatus("done");
+          showToast("¡Video generado! 🎬", "success");
+        } else if (data.status === "FAILED") {
+          clearInterval(realVideoPollRef.current);
+          setRealVideoStatus("error");
+          setRealVideoError(data.failure || "La generación del video falló en Runway");
+        }
+      } catch (err) {
+        clearInterval(realVideoPollRef.current);
+        setRealVideoStatus("error");
+        setRealVideoError(err.response?.data?.message || "Error al consultar el estado del video");
+      }
+    }, 5000);
+  };
+
+  const handleGenerateRealVideo = async () => {
+    if (!videoForm.product.trim()) return;
+    if (realVideoPollRef.current) clearInterval(realVideoPollRef.current);
+    setRealVideoStatus("starting");
+    setRealVideoUrl(null);
+    setRealVideoError("");
+    try {
+      const prompt = `${videoForm.product}${videoForm.goal ? `, ${videoForm.goal}` : ""}, cinematic professional marketing video`;
+      const data = await generateRealVideoAPI({ product: videoForm.product, prompt, duration: realVideoDuration });
+      setRealVideoStatus("processing");
+      pollRealVideo(data.taskId);
+    } catch (err) {
+      setRealVideoStatus("error");
+      setRealVideoError(err.response?.data?.message || "Error al iniciar la generación del video");
+    }
+  };
+
+  useEffect(() => () => { if (realVideoPollRef.current) clearInterval(realVideoPollRef.current); }, []);
+
+  const renderVideo = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div className="section-card">
+        <div className="section-card-header">
+          <span className="section-title">🎬 Generador de Script de Video</span>
+        </div>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
+          La IA crea un guion escena por escena listo para grabar — Reels, TikToks, YouTube Shorts y más.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Producto / Servicio</label>
+            <input type="text" placeholder="Ej: café artesanal, curso online, ropa deportiva..." value={videoForm.product}
+              onChange={(e) => setVideoForm((f) => ({ ...f, product: e.target.value }))}
+              style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.65rem 0.9rem", color: "var(--text-active)", fontSize: "0.875rem", outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Formato</label>
+            <select value={videoForm.format} onChange={(e) => setVideoForm((f) => ({ ...f, format: e.target.value }))}
+              style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.65rem 0.9rem", color: "var(--text-active)", fontSize: "0.875rem", outline: "none" }}>
+              {["Reel de Instagram", "TikTok", "YouTube Short", "Historia / Story", "YouTube largo", "LinkedIn Video"].map((f) => <option key={f}>{f}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Duración</label>
+            <select value={videoForm.duration} onChange={(e) => setVideoForm((f) => ({ ...f, duration: e.target.value }))}
+              style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.65rem 0.9rem", color: "var(--text-active)", fontSize: "0.875rem", outline: "none" }}>
+              {["15 segundos", "30 segundos", "60 segundos", "3 minutos", "5 minutos"].map((d) => <option key={d}>{d}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Objetivo del video</label>
+            <input type="text" placeholder="Ej: aumentar ventas, generar awareness..." value={videoForm.goal}
+              onChange={(e) => setVideoForm((f) => ({ ...f, goal: e.target.value }))}
+              style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.65rem 0.9rem", color: "var(--text-active)", fontSize: "0.875rem", outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Público objetivo</label>
+            <input type="text" placeholder="Ej: mujeres 25-35, emprendedores..." value={videoForm.audience}
+              onChange={(e) => setVideoForm((f) => ({ ...f, audience: e.target.value }))}
+              style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.65rem 0.9rem", color: "var(--text-active)", fontSize: "0.875rem", outline: "none", boxSizing: "border-box" }} />
+          </div>
+        </div>
+        <button className="btn-primary" onClick={handleGenerateVideo}
+          disabled={videoLoading || !videoForm.product.trim() || !videoForm.goal.trim() || !videoForm.audience.trim()}
+          style={{ marginTop: "1rem", height: "44px", fontSize: "0.9rem", width: "100%" }}>
+          {videoLoading ? "Creando script con IA..." : "🎬 Generar Script de Video"}
+        </button>
+      </div>
+
+      {/* Video real con IA (Runway) */}
+      <div className="section-card" style={{ border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.04)" }}>
+        <div className="section-card-header">
+          <span className="section-title">🎥 Generar Video Real con IA</span>
+        </div>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
+          Genera un clip de video real (no solo texto) a partir del producto descrito arriba. Por limitaciones de los modelos actuales de IA, el clip dura {realVideoDuration} segundos.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Duración del clip</label>
+            <select value={realVideoDuration} onChange={(e) => setRealVideoDuration(Number(e.target.value))}
+              style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.65rem 0.9rem", color: "var(--text-active)", fontSize: "0.875rem", outline: "none" }}>
+              <option value={5}>5 segundos</option>
+              <option value={10}>10 segundos</option>
+            </select>
+          </div>
+          <button className="btn-primary" onClick={handleGenerateRealVideo}
+            disabled={realVideoStatus === "starting" || realVideoStatus === "processing" || !videoForm.product.trim()}
+            style={{ height: "44px", fontSize: "0.9rem", padding: "0 1.5rem" }}>
+            {realVideoStatus === "starting" ? "Iniciando..." : realVideoStatus === "processing" ? "Generando video..." : "🎥 Generar Video Real"}
+          </button>
+        </div>
+        {!videoForm.product.trim() && (
+          <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.6rem" }}>Escribe el producto/servicio arriba para poder generar el video.</p>
+        )}
+
+        {realVideoStatus === "processing" && (
+          <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", fontSize: "0.875rem", marginTop: "1rem" }}>
+            <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, #8b5cf6, #6d28d9)", margin: "0 auto 1rem" }} />
+            Generando el clip de video con IA... esto puede tardar 1-3 minutos.
+          </div>
+        )}
+
+        {realVideoStatus === "error" && (
+          <div style={{ marginTop: "1rem", padding: "0.9rem 1.1rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "var(--border-radius-sm)", color: "#fca5a5", fontSize: "0.83rem" }}>
+            ⚠️ {realVideoError}
+          </div>
+        )}
+
+        {realVideoStatus === "done" && realVideoUrl && (
+          <div style={{ marginTop: "1.25rem" }}>
+            <video src={realVideoUrl} controls style={{ width: "100%", borderRadius: "var(--border-radius-md)", display: "block" }} />
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.75rem" }}>
+              <a href={realVideoUrl} download={`video-${videoForm.product}-${Date.now()}.mp4`} target="_blank" rel="noreferrer"
+                className="btn-primary" style={{ padding: "0.55rem 1.4rem", fontSize: "0.85rem", height: "auto", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                ↓ Descargar video
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {videoLoading && (
+        <div style={{ textAlign: "center", padding: "2.5rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+          <div className="pulse-element" style={{ width: "48px", height: "48px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", margin: "0 auto 1rem" }} />
+          Escribiendo el guion escena por escena...
+        </div>
+      )}
+
+      {videoResult && !videoLoading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {/* Hook */}
+          <div className="section-card" style={{ border: "1px solid rgba(201,105,43,0.35)", background: "rgba(201,105,43,0.06)" }}>
+            <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>🎣 Hook — primeros 3 segundos</p>
+            <p style={{ color: "var(--text-active)", fontSize: "1.05rem", fontWeight: "700", lineHeight: "1.5", margin: 0 }}>"{videoResult.hook}"</p>
+          </div>
+
+          {/* Escenas */}
+          <div className="section-card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+              <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>🎬 Escenas ({videoResult.scenes?.length})</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {(videoResult.scenes || []).map((scene, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: "0.75rem", padding: "0.9rem", background: "var(--bg-tertiary)", borderRadius: "var(--border-radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "800", fontSize: "0.8rem", flexShrink: 0 }}>{i + 1}</div>
+                    <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: "700", textAlign: "center" }}>{scene.time}</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-soft)", margin: 0 }}><span style={{ color: "var(--text-muted)", fontWeight: "700" }}>📷 </span>{scene.visual}</p>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-main)", margin: 0 }}><span style={{ color: "var(--text-muted)", fontWeight: "700" }}>🎤 </span>{scene.narration}</p>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}><span style={{ fontWeight: "700", fontStyle: "normal" }}>✂️ </span>{scene.transition}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Caption + CTA */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="section-card">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>📝 Caption listo</p>
+                <button onClick={() => { navigator.clipboard.writeText(videoResult.caption); showToast("Caption copiado ✓", "success"); }}
+                  style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.25rem 0.65rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.72rem", fontWeight: "700" }}>
+                  Copiar
+                </button>
+              </div>
+              <p style={{ fontSize: "0.83rem", color: "var(--text-main)", lineHeight: "1.65", margin: 0 }}>{videoResult.caption}</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div className="section-card" style={{ flex: 1 }}>
+                <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>🚀 CTA Final</p>
+                <p style={{ fontSize: "0.875rem", color: "var(--text-active)", fontWeight: "700", margin: 0 }}>{videoResult.cta}</p>
+              </div>
+              <div className="section-card" style={{ flex: 1 }}>
+                <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>🎵 Música recomendada</p>
+                <p style={{ fontSize: "0.83rem", color: "var(--text-soft)", margin: 0 }}>{videoResult.musicTip}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tips de producción */}
+          <div className="section-card">
+            <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.75rem" }}>💡 Tips de producción</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+              {(videoResult.productionTips || "").split(";").map((tip, i) => tip.trim() && (
+                <div key={i} style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+                  <span style={{ width: "20px", height: "20px", borderRadius: "50%", background: "rgba(201,105,43,0.15)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: "800", flexShrink: 0, marginTop: "1px" }}>{i + 1}</span>
+                  <p style={{ fontSize: "0.83rem", color: "var(--text-soft)", margin: 0, lineHeight: "1.5" }}>{tip.trim()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Acciones */}
+          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+            <button onClick={handleGenerateVideo}
+              style={{ background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 1.2rem", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85rem" }}>
+              Regenerar script
+            </button>
+            <button className="btn-primary" onClick={handleDownloadVideoScript} style={{ padding: "0.55rem 1.4rem", fontSize: "0.85rem", height: "auto" }}>
+              ↓ Descargar script
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   /* ── TENDENCIAS ── */
   const handleGenerateTrends = async () => {
     if (!trendsTopic.trim()) return;
@@ -468,7 +1027,7 @@ function Home() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
         {trends.map((trend) => (
-          <div key={trend.id} style={{ border: "1px solid var(--border-color)", padding: "1.5rem", borderRadius: "var(--border-radius-md)", backgroundColor: "var(--bg-card)", position: "relative" }}>
+          <div key={trend.id} className="trend-card">
             <button onClick={() => deleteTrend(trend.id)} title="Eliminar"
               style={{ position: "absolute", top: "0.75rem", right: "0.75rem", background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem" }}>✕</button>
             <h4 style={{ color: trend.color, marginBottom: "0.75rem", paddingRight: "1.5rem", fontSize: "0.95rem" }}>{trend.title}</h4>
@@ -525,6 +1084,7 @@ function Home() {
       { id: "all", label: "Todos" }, { id: "favorites", label: "⭐ Favoritos" },
       { id: "campaign", label: "Campañas" }, { id: "copy", label: "Copys" },
       { id: "hashtag", label: "Hashtags" }, { id: "calendar", label: "Calendarios" },
+      { id: "video", label: "🎬 Videos" },
     ];
     const filtered = history.filter((item) => {
       const matchesFilter = historyFilter === "all" ? true : historyFilter === "favorites" ? item.isFavorite : item.type === historyFilter;
@@ -555,6 +1115,7 @@ function Home() {
             <input
               type="text"
               placeholder="Buscar por producto o contenido..."
+              autoComplete="off"
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
               style={{ width: "100%", paddingLeft: "2.2rem", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 0.9rem 0.55rem 2.2rem", color: "var(--text-main)", fontSize: "0.85rem", outline: "none" }}
@@ -577,47 +1138,340 @@ function Home() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {filtered.map((item) => (
-              <div key={item._id} style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.3)" : "var(--border-color)"}`, borderRadius: "var(--border-radius-md)", padding: "1.25rem 1.5rem", backgroundColor: "var(--bg-tertiary)", position: "relative" }}>
-                <div style={{ position: "absolute", top: "1rem", right: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <div key={item._id} className="history-card" style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.3)" : "rgba(255,255,255,0.1)"}`, padding: "1.25rem 1.5rem" }}>
+                <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", justifyContent: "flex-end", marginBottom: "0.75rem", flexWrap: "wrap" }}>
                   {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
-                    <button
-                      onClick={() => { setRefineModal(item); setRefineResult(""); }}
-                      title="Perfeccionar con IA"
-                      style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", color: "var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "0.25rem 0.65rem", fontSize: "0.72rem", fontWeight: "700", cursor: "pointer", whiteSpace: "nowrap" }}>
+                    <button onClick={() => { setRefineModal(item); setRefineResult(""); }} title="Perfeccionar con IA" className="btn-action-refine">
                       ✨ Perfeccionar
                     </button>
                   )}
-                  <button onClick={() => toggleFavorite(item._id)} title={item.isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                    style={{ background: "transparent", border: "none", fontSize: "1.1rem", cursor: "pointer", lineHeight: 1, opacity: item.isFavorite ? 1 : 0.4 }}>
-                    {item.isFavorite ? "⭐" : "☆"}
+                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
+                    <button
+                      onClick={() => setPublishModalOpen({ content: item.output, imageUrl: item.imageUrl || null })}
+                      title="Publicar en redes sociales"
+                      style={{ height: "30px", padding: "0 0.75rem", fontSize: "0.75rem", background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.4)", borderRadius: "var(--border-radius-sm)", color: "var(--accent-secondary)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                      Publicar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      const text = Array.isArray(item.output) ? item.output.join("\n") : typeof item.output === "object" ? JSON.stringify(item.output, null, 2) : item.output;
+                      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url; a.download = `${item.type}-${item.input?.product || "resultado"}-${Date.now()}.txt`; a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    title="Descargar como .txt"
+                    className="btn-action-download">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    .txt
                   </button>
-                  <button onClick={() => deleteHistoryItem(item._id)} title="Eliminar"
-                    style={{ background: "transparent", color: "#ef4444", border: "none", fontSize: "1rem", cursor: "pointer", lineHeight: 1, opacity: 0.6 }}>✕</button>
+                  <button onClick={() => toggleFavorite(item._id)} title={item.isFavorite ? "Quitar de favoritos" : "Guardar en favoritos"} className={item.isFavorite ? "btn-action-fav active" : "btn-action-fav"}>
+                    {item.isFavorite ? "★" : "☆"} Fav
+                  </button>
+                  <button onClick={() => deleteHistoryItem(item._id)} title="Eliminar" className="btn-action-delete">✕</button>
                 </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "0.6rem" }}>
-                  <span style={{ fontSize: "0.7rem", background: "rgba(201,105,43,0.15)", color: "#f5b27a", padding: "0.2rem 0.55rem", borderRadius: "4px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "0.7rem" }}>
+                  <span style={{ fontSize: "0.75rem", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", color: "#fff", padding: "0.25rem 0.7rem", borderRadius: "5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", boxShadow: "0 2px 8px rgba(201,105,43,0.3)" }}>
                     {TYPE_LABELS[item.type] || item.type}
                   </span>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{new Date(item.createdAt).toLocaleString()}</span>
                 </div>
-                <h4 style={{ color: "var(--text-active)", fontSize: "0.9rem", marginBottom: "0.25rem", paddingRight: "4rem", fontWeight: "600" }}>
+                <h4 style={{ color: "var(--text-active)", fontSize: "1rem", marginBottom: "0.1rem", fontWeight: "700", letterSpacing: "-0.02em", borderLeft: "3px solid var(--accent-primary)", paddingLeft: "0.6rem" }}>
                   {item.input?.product || "Sin nombre"}
                 </h4>
-                <details style={{ marginTop: "0.75rem" }}>
-                  <summary style={{ color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.82rem", fontWeight: "600" }}>Ver resultado</summary>
-                  <div style={{ marginTop: "0.75rem", padding: "1rem", backgroundColor: "rgba(11,15,25,0.4)", borderRadius: "var(--border-radius-sm)", color: "var(--text-main)", fontSize: "0.875rem", lineHeight: "1.7", whiteSpace: "pre-wrap", borderLeft: "2px solid var(--accent-primary)" }}>
-                    {Array.isArray(item.output) ? item.output.join(" ") : typeof item.output === "object" ? JSON.stringify(item.output, null, 2) : item.output}
-                  </div>
-                </details>
+                {item.output && (() => {
+                  const raw = Array.isArray(item.output) ? item.output.join(" ") : typeof item.output === "object" ? JSON.stringify(item.output) : item.output;
+                  const preview = raw?.slice(0, 130);
+                  return preview ? (
+                    <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: "1.55", marginTop: "0.4rem", marginBottom: 0, paddingLeft: "0.6rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      {preview}{raw.length > 130 ? "…" : ""}
+                    </p>
+                  ) : null;
+                })()}
+                <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                  <button className="btn-view-detail" onClick={() => openDetailModal(item)}>
+                    Ver completo
+                    <svg className="btn-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                      <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                  </button>
+                  {item.type === "campaign" && (
+                    <button
+                      onClick={() => openDetailModal(item)}
+                      title={item.imageUrl ? "Ver / cambiar imagen" : "Generar imagen para esta campaña"}
+                      style={{ height: "28px", padding: "0 0.75rem", fontSize: "0.74rem", background: item.imageUrl ? "linear-gradient(135deg, rgba(14,165,233,0.15), rgba(2,132,199,0.15))" : "rgba(201,105,43,0.1)", border: `1px solid ${item.imageUrl ? "rgba(14,165,233,0.4)" : "rgba(201,105,43,0.35)"}`, borderRadius: "999px", color: item.imageUrl ? "#38bdf8" : "var(--accent-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      {item.imageUrl ? "Con imagen" : "🎨 Generar imagen"}
+                    </button>
+                  )}
+                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
+                    <button
+                      onClick={() => openDetailModal(item)}
+                      title="Generar video script para este contenido"
+                      style={{ height: "28px", padding: "0 0.75rem", fontSize: "0.74rem", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.35)", borderRadius: "999px", color: "#a78bfa", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                      🎬 Video Script
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
 
+      {detailModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}
+          onClick={closeDetailModal}>
+          <div
+            style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", width: "92vw", maxWidth: "1060px", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ padding: "1.5rem 1.75rem 1rem", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexShrink: 0 }}>
+              <div>
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.4rem" }}>
+                  <span style={{ fontSize: "0.68rem", background: "rgba(201,105,43,0.15)", color: "#f5b27a", padding: "0.18rem 0.55rem", borderRadius: "4px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {TYPE_LABELS[detailModal.type] || detailModal.type}
+                  </span>
+                  {detailModal.isFavorite && <span style={{ fontSize: "0.85rem" }}>⭐</span>}
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{new Date(detailModal.createdAt).toLocaleString()}</span>
+                </div>
+                <h3 style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "1.05rem", margin: 0 }}>
+                  {detailModal.input?.product || "Sin nombre"}
+                </h3>
+              </div>
+              <button onClick={closeDetailModal} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.3rem", lineHeight: 1, flexShrink: 0 }}>✕</button>
+            </div>
+
+            {/* Contenido scrollable */}
+            <div style={{ overflowY: "auto", flex: 1, padding: "1.5rem 1.75rem" }}>
+              <div style={{ background: "rgba(11,15,25,0.5)", border: "1px solid var(--border-color)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.75rem", fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.85", whiteSpace: "pre-wrap" }}>
+                {Array.isArray(detailModal.output)
+                  ? detailModal.output.join("\n")
+                  : typeof detailModal.output === "object"
+                  ? JSON.stringify(detailModal.output, null, 2)
+                  : detailModal.output}
+              </div>
+
+              {/* Imagen — generación y edición para campañas */}
+              {detailModal.type === "campaign" && (
+                <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem" }}>
+                    <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
+                      🎨 {detailImageUrl ? "Imagen de la campaña" : "Generar imagen para la campaña"}
+                    </p>
+                    {detailImageUrl && !detailImageLoading && !detailImageError && (
+                      <button onClick={handleDownloadDetailImage}
+                        style={{ height: "30px", padding: "0 0.75rem", fontSize: "0.75rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.85rem" }}>
+                    <input
+                      type="text"
+                      placeholder="Describe la imagen o déjalo vacío para generarla automáticamente"
+                      value={detailImagePrompt}
+                      onChange={(e) => setDetailImagePrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleGenerateDetailImage()}
+                      style={{ flex: 1, backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 0.85rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none" }}
+                    />
+                    <button className="btn-primary" onClick={handleGenerateDetailImage} disabled={detailImageLoading}
+                      style={{ height: "38px", padding: "0 1rem", fontSize: "0.83rem", whiteSpace: "nowrap" }}>
+                      🎨 {detailImageUrl ? "Cambiar imagen" : "Generar imagen"}
+                    </button>
+                  </div>
+                  {!detailImageUrl && !detailImageLoading && (
+                    <div style={{ minHeight: "160px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.6rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                      <span style={{ fontSize: "2rem" }}>🎨</span>
+                      <p style={{ margin: 0 }}>Haz clic en "Generar imagen" para crear una visual para esta campaña</p>
+                    </div>
+                  )}
+                  {detailImageError && (
+                    <div style={{ minHeight: "120px", background: "rgba(248,113,113,0.05)", border: "1px dashed rgba(248,113,113,0.2)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.6rem" }}>
+                      <span style={{ fontSize: "1.5rem" }}>⚠️</span>
+                      <p style={{ color: "#f87171", fontSize: "0.83rem", margin: 0 }}>No se pudo generar la imagen. Intenta de nuevo.</p>
+                    </div>
+                  )}
+                  {detailImageUrl && !detailImageError && (
+                    <div style={{ position: "relative", borderRadius: "var(--border-radius-md)", overflow: "hidden", background: "var(--bg-tertiary)", minHeight: "160px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {detailImageLoading && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", background: "var(--bg-tertiary)", zIndex: 1 }}>
+                          <div className="pulse-element" style={{ width: "36px", height: "36px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" }} />
+                          <p className="pulse-element" style={{ color: "var(--text-muted)", fontSize: "0.83rem" }}>Generando imagen...</p>
+                        </div>
+                      )}
+                      <img
+                        src={detailImageUrl}
+                        alt={`Campaña ${detailModal.input?.product}`}
+                        onLoad={() => setDetailImageLoading(false)}
+                        onError={() => { setDetailImageLoading(false); setDetailImageError(true); }}
+                        style={{ width: "100%", borderRadius: "var(--border-radius-md)", display: detailImageLoading ? "none" : "block" }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Video Script — generación para campaña/copy/hashtag */}
+              {(detailModal.type === "campaign" || detailModal.type === "copy" || detailModal.type === "hashtag") && (
+                <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem" }}>
+                    <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
+                      🎬 Video Script para este contenido
+                    </p>
+                    {detailVideoResult && !detailVideoLoading && (
+                      <button onClick={handleDownloadDetailVideo}
+                        style={{ height: "30px", padding: "0 0.75rem", fontSize: "0.75rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "0.85rem" }}>
+                    <div style={{ flex: 1, minWidth: "150px" }}>
+                      <label style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.3rem" }}>Formato</label>
+                      <select value={detailVideoForm.format} onChange={(e) => setDetailVideoForm((f) => ({ ...f, format: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 0.8rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none" }}>
+                        {["Reel de Instagram","TikTok","YouTube Short","Historia / Story","YouTube largo","LinkedIn Video"].map((f) => <option key={f}>{f}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: "130px" }}>
+                      <label style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.3rem" }}>Duración</label>
+                      <select value={detailVideoForm.duration} onChange={(e) => setDetailVideoForm((f) => ({ ...f, duration: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 0.8rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none" }}>
+                        {["15 segundos","30 segundos","60 segundos","3 minutos","5 minutos"].map((d) => <option key={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <button className="btn-primary" onClick={handleGenerateDetailVideo} disabled={detailVideoLoading}
+                      style={{ height: "38px", padding: "0 1.1rem", fontSize: "0.83rem", whiteSpace: "nowrap" }}>
+                      {detailVideoLoading ? "Generando..." : `🎬 ${detailVideoResult ? "Regenerar" : "Generar"} Video Script`}
+                    </button>
+                  </div>
+
+                  {detailVideoLoading && (
+                    <div style={{ textAlign: "center", padding: "1.5rem", color: "var(--text-muted)", fontSize: "0.83rem" }}>
+                      <div className="pulse-element" style={{ width: "36px", height: "36px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", margin: "0 auto 0.75rem" }} />
+                      Escribiendo el guion escena por escena...
+                    </div>
+                  )}
+
+                  {!detailVideoResult && !detailVideoLoading && (
+                    <div style={{ minHeight: "80px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", color: "var(--text-muted)", fontSize: "0.83rem" }}>
+                      <span style={{ fontSize: "1.5rem" }}>🎬</span>
+                      Elige formato y duración, luego haz clic en "Generar Video Script"
+                    </div>
+                  )}
+
+                  {detailVideoResult && !detailVideoLoading && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                      <div style={{ background: "rgba(201,105,43,0.06)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "0.9rem" }}>
+                        <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.35rem" }}>🎣 Hook — primeros 3 segundos</p>
+                        <p style={{ color: "var(--text-active)", fontSize: "0.95rem", fontWeight: "700", lineHeight: "1.5", margin: 0 }}>"{detailVideoResult.hook}"</p>
+                      </div>
+
+                      <div>
+                        <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.45rem" }}>🎬 Escenas ({detailVideoResult.scenes?.length})</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                          {(detailVideoResult.scenes || []).map((scene, i) => (
+                            <div key={i} style={{ display: "grid", gridTemplateColumns: "46px 1fr", gap: "0.55rem", padding: "0.7rem", background: "var(--bg-tertiary)", borderRadius: "var(--border-radius-sm)", border: "1px solid var(--border-color)" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.15rem" }}>
+                                <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "800", fontSize: "0.7rem" }}>{i + 1}</div>
+                                <span style={{ fontSize: "0.57rem", color: "var(--text-muted)", fontWeight: "700", textAlign: "center" }}>{scene.time}</span>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                <p style={{ fontSize: "0.76rem", color: "var(--text-soft)", margin: 0 }}><span style={{ fontWeight: "700" }}>📷 </span>{scene.visual}</p>
+                                <p style={{ fontSize: "0.76rem", color: "var(--text-main)", margin: 0 }}><span style={{ fontWeight: "700" }}>🎤 </span>{scene.narration}</p>
+                                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}>✂️ {scene.transition}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+                        <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.8rem" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                            <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>📝 Caption</p>
+                            <button onClick={() => { navigator.clipboard.writeText(detailVideoResult.caption); showToast("Caption copiado ✓", "success"); }}
+                              style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.15rem 0.45rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.67rem", fontWeight: "700" }}>
+                              Copiar
+                            </button>
+                          </div>
+                          <p style={{ fontSize: "0.78rem", color: "var(--text-main)", lineHeight: "1.6", margin: 0 }}>{detailVideoResult.caption}</p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.8rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🚀 CTA</p>
+                            <p style={{ fontSize: "0.82rem", color: "var(--text-active)", fontWeight: "700", margin: 0 }}>{detailVideoResult.cta}</p>
+                          </div>
+                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.8rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🎵 Música</p>
+                            <p style={{ fontSize: "0.78rem", color: "var(--text-soft)", margin: 0 }}>{detailVideoResult.musicTip}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.8rem" }}>
+                        <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.4rem" }}>💡 Tips de producción</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.22rem" }}>
+                          {(detailVideoResult.productionTips || "").split(";").map((tip, i) => tip.trim() && (
+                            <div key={i} style={{ display: "flex", gap: "0.45rem", alignItems: "flex-start" }}>
+                              <span style={{ width: "16px", height: "16px", borderRadius: "50%", background: "rgba(201,105,43,0.15)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", fontWeight: "800", flexShrink: 0, marginTop: "2px" }}>{i + 1}</span>
+                              <p style={{ fontSize: "0.78rem", color: "var(--text-soft)", margin: 0, lineHeight: "1.5" }}>{tip.trim()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer con acciones */}
+            <div style={{ padding: "1rem 1.75rem", borderTop: "1px solid var(--border-color)", display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap", flexShrink: 0 }}>
+              {(detailModal.type === "campaign" || detailModal.type === "copy" || detailModal.type === "hashtag") && (
+                <button
+                  onClick={() => { setRefineModal(detailModal); setRefineResult(""); closeDetailModal(); }}
+                  style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", color: "var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "0.45rem 0.9rem", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}>
+                  ✨ Perfeccionar con IA
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  const text = Array.isArray(detailModal.output) ? detailModal.output.join("\n") : typeof detailModal.output === "object" ? JSON.stringify(detailModal.output, null, 2) : detailModal.output;
+                  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = `${detailModal.type}-${detailModal.input?.product || "resultado"}-${Date.now()}.txt`; a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-soft)", borderRadius: "var(--border-radius-sm)", padding: "0.45rem 0.9rem", fontSize: "0.8rem", cursor: "pointer" }}>
+                ↓ Descargar .txt
+              </button>
+              <button
+                onClick={closeDetailModal}
+                style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.45rem 0.9rem", fontSize: "0.8rem", cursor: "pointer" }}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {refineModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}
           onClick={() => setRefineModal(null)}>
-          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "2rem", width: "100%", maxWidth: "640px", maxHeight: "90vh", overflowY: "auto" }}
+          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "2rem", width: "92vw", maxWidth: "920px", maxHeight: "92vh", overflowY: "auto" }}
             onClick={(e) => e.stopPropagation()}>
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
@@ -634,7 +1488,7 @@ function Home() {
               <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>
                 Original — {refineModal.input?.product}
               </p>
-              <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "1rem", fontSize: "0.83rem", color: "var(--text-soft)", lineHeight: "1.6", maxHeight: "160px", overflowY: "auto", whiteSpace: "pre-wrap" }}>
+              <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "1rem", fontSize: "0.83rem", color: "var(--text-soft)", lineHeight: "1.6", maxHeight: "260px", overflowY: "auto", whiteSpace: "pre-wrap" }}>
                 {Array.isArray(refineModal.output) ? refineModal.output.join(" ") : refineModal.output}
               </div>
             </div>
@@ -662,7 +1516,7 @@ function Home() {
                     </button>
                   </div>
                 </div>
-                <div style={{ background: "var(--bg-tertiary)", border: "1px solid rgba(201,105,43,0.2)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.25rem", fontSize: "0.875rem", color: "var(--text-main)", lineHeight: "1.7", whiteSpace: "pre-wrap", maxHeight: "280px", overflowY: "auto" }}>
+                <div style={{ background: "var(--bg-tertiary)", border: "1px solid rgba(201,105,43,0.2)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.5rem", fontSize: "0.925rem", color: "var(--text-main)", lineHeight: "1.8", whiteSpace: "pre-wrap", maxHeight: "480px", overflowY: "auto" }}>
                   {refineResult}
                 </div>
                 <button className="btn-primary" onClick={handleRefine} disabled={refineLoading}
@@ -678,6 +1532,234 @@ function Home() {
     );
   };
 
+  /* ── REDES SOCIALES ── */
+  const loadSocialCreds = async () => {
+    setSocialLoadingCreds(true);
+    try {
+      const data = await getSocialCredentialsAPI();
+      setSocialCreds(data.credentials);
+    } catch { /* silencioso */ }
+    finally { setSocialLoadingCreds(false); }
+  };
+
+  const handleSocialSave = async (platformId) => {
+    const platform = SOCIAL_PLATFORMS.find((p) => p.id === platformId);
+    if (!platform) return;
+    const allFilled = platform.fields.every((f) => (socialForm[f.key] || "").trim());
+    if (!allFilled) return;
+    setSocialSaving(true);
+    try {
+      const credentials = {};
+      platform.fields.forEach((f) => { credentials[f.key] = socialForm[f.key].trim(); });
+      await saveSocialCredentialsAPI(platformId, credentials);
+      await loadSocialCreds();
+      setSocialForm({});
+      setSocialOpenForm(null);
+      showToast(`Cuenta de ${platform.label} conectada ✓`, "success");
+    } catch { showToast("Error al guardar credenciales", "error"); }
+    finally { setSocialSaving(false); }
+  };
+
+  const handleSocialDisconnect = async (platform) => {
+    setSocialDisconnecting(platform);
+    try {
+      await disconnectSocialAPI(platform);
+      await loadSocialCreds();
+      showToast("Cuenta desconectada", "info");
+    } catch { showToast("Error al desconectar", "error"); }
+    finally { setSocialDisconnecting(null); }
+  };
+
+  const FB_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+    </svg>
+  );
+  const IG_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+    </svg>
+  );
+
+  const TT_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z"/>
+    </svg>
+  );
+  const TW_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </svg>
+  );
+  const LI_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+    </svg>
+  );
+
+  const SOCIAL_PLATFORMS = [
+    { id: "facebook", label: "Facebook", logo: FB_LOGO,
+      badge: null,
+      fields: [
+        { key: "pageId", label: "Page ID", placeholder: "Ej: 123456789012345", type: "text" },
+        { key: "accessToken", label: "Access Token", placeholder: "EAAxxxxxxx...", type: "text" },
+      ],
+      instructions: ["Ve a developers.facebook.com y crea una app (tipo: Business)", "En tu app añade el producto 'Pages API'", "Desde Graph API Explorer selecciona tu app y tu Página", "Genera un token con permisos: pages_manage_posts, pages_read_engagement", "Copia el Page ID desde la configuración de tu Página de Facebook"] },
+    { id: "instagram", label: "Instagram", logo: IG_LOGO,
+      badge: null,
+      fields: [
+        { key: "pageId", label: "Page ID (Instagram Business)", placeholder: "Ej: 123456789012345", type: "text" },
+        { key: "accessToken", label: "Access Token", placeholder: "EAAxxxxxxx...", type: "text" },
+      ],
+      instructions: ["Tu cuenta debe ser Business o Creator y estar conectada a una Página de Facebook", "Ve a developers.facebook.com → Graph API Explorer", "Genera un token con: instagram_basic, instagram_content_publish, pages_read_engagement", "El 'Page ID' es el ID numérico de tu cuenta Instagram Business (no el @usuario)", "Para publicar en Instagram también necesitas tener una imagen generada"] },
+    { id: "tiktok", label: "TikTok", logo: TT_LOGO,
+      badge: "Próximamente",
+      fields: [],
+      instructions: ["Crea una cuenta de desarrollador en developers.tiktok.com", "Crea una app y solicita acceso al 'Content Posting API'", "El proceso de aprobación puede tardar varios días hábiles", "Una vez aprobado, genera tu Access Token desde el portal de TikTok for Business", "Copia tu Open ID (identificador único de tu cuenta TikTok)"] },
+    { id: "twitter", label: "Twitter / X", logo: TW_LOGO,
+      badge: null,
+      fields: [
+        { key: "apiKey", label: "API Key", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+        { key: "apiSecret", label: "API Key Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+        { key: "accessToken", label: "Access Token", placeholder: "1234567890-xxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+        { key: "accessTokenSecret", label: "Access Token Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+      ],
+      instructions: ["Ve a developer.twitter.com y crea un proyecto + app", "En 'Settings', activa permisos de Read and Write", "En 'Keys and Tokens' genera: API Key, API Secret, Access Token y Access Token Secret", "Asegúrate de que el Access Token tenga permisos de escritura (no solo lectura)", "Guarda los 4 tokens — todos son necesarios para firmar los tweets con OAuth 1.0a"] },
+    { id: "linkedin", label: "LinkedIn", logo: LI_LOGO,
+      badge: null,
+      fields: [
+        { key: "accessToken", label: "Access Token OAuth 2.0", placeholder: "AQXxxxxxxxxxxxxxxxxx...", type: "text" },
+        { key: "pageId", label: "Author URN", placeholder: "Ej: urn:li:person:ABC123XYZ", type: "text" },
+      ],
+      instructions: ["Ve a linkedin.com/developers y crea una app asociada a una Página de empresa", "Solicita los productos 'Share on LinkedIn' y 'Sign In with LinkedIn'", "En OAuth 2.0 tools genera un Access Token con scopes: w_member_social, r_liteprofile", "El Author URN tiene el formato urn:li:person:XXXXXXXX — lo obtienes de GET /v2/me", "Los tokens de LinkedIn expiran cada 60 días — recuerda renovarlos"] },
+  ];
+
+  const renderSocialMedia = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: "800", color: "var(--text-active)", letterSpacing: "-0.03em", margin: 0 }}>Redes Sociales</h1>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginTop: "0.3rem" }}>Conecta tus cuentas para publicar el contenido generado directamente desde la app.</p>
+      </div>
+
+      {socialLoadingCreds ? (
+        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>Cargando...</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {SOCIAL_PLATFORMS.map((platform) => {
+            const cred = socialCreds[platform.id];
+            const isOpen = socialOpenForm === platform.id;
+            const showInstr = socialShowInstructions === platform.id;
+            return (
+              <div key={platform.id} className="section-card" style={{ border: `1px solid ${cred?.connected ? "rgba(201,105,43,0.3)" : "var(--border-color)"}` }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                    <div style={{ width: "42px", height: "42px", borderRadius: "var(--border-radius-md)", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-soft)" }}>
+                      {platform.logo}
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.95rem", margin: 0 }}>{platform.label}</p>
+                        {platform.badge && (
+                          <span style={{ fontSize: "0.65rem", fontWeight: "700", background: "rgba(250,204,21,0.15)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)", borderRadius: "4px", padding: "0.1rem 0.45rem", letterSpacing: "0.04em" }}>{platform.badge}</span>
+                        )}
+                      </div>
+                      {cred?.connected ? (
+                        <p style={{ color: "var(--accent-secondary)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Conectado · {platform.id === "twitter" ? "API Key" : "ID"}: {cred.pageId}</p>
+                      ) : (
+                        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Sin conectar</p>
+                      )}
+                    </div>
+                  </div>
+                  {platform.badge ? (
+                    <button
+                      onClick={() => setSocialShowInstructions(showInstr ? null : platform.id)}
+                      style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}
+                    >
+                      {showInstr ? "Ocultar" : "Ver requisitos"}
+                    </button>
+                  ) : cred?.connected ? (
+                    <button
+                      onClick={() => handleSocialDisconnect(platform.id)}
+                      disabled={socialDisconnecting === platform.id}
+                      style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}
+                    >
+                      {socialDisconnecting === platform.id ? "..." : "Desconectar"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { setSocialOpenForm(isOpen ? null : platform.id); setSocialForm({}); setSocialShowInstructions(null); }}
+                      className="btn-primary"
+                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
+                    >
+                      {isOpen ? "Cancelar" : "Conectar"}
+                    </button>
+                  )}
+                </div>
+
+                {platform.badge && showInstr && (
+                  <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border-color)" }}>
+                    <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.6rem" }}>Qué necesitas para conectar {platform.label}</p>
+                    <ol style={{ margin: 0, paddingLeft: "1.2rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                      {platform.instructions.map((step, i) => (
+                        <li key={i} style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {!platform.badge && !cred?.connected && isOpen && (
+                  <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    <button
+                      onClick={() => setSocialShowInstructions(showInstr ? null : platform.id)}
+                      style={{ alignSelf: "flex-start", background: "none", border: "none", color: "var(--accent-secondary)", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+                    >
+                      {showInstr ? "Ocultar instrucciones" : "¿Cómo obtengo el token? →"}
+                    </button>
+                    {showInstr && (
+                      <ol style={{ margin: 0, paddingLeft: "1.2rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                        {platform.instructions.map((step, i) => (
+                          <li key={i} style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                    {platform.fields.map((field) => (
+                      <div key={field.key}>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>
+                          {field.label}
+                        </label>
+                        <input
+                          type={field.type}
+                          placeholder={field.placeholder}
+                          autoComplete="new-password"
+                          value={socialForm[field.key] || ""}
+                          onChange={(e) => setSocialForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                          style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.8rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    ))}
+                    <button className="btn-primary"
+                      onClick={() => handleSocialSave(platform.id)}
+                      disabled={socialSaving || !platform.fields.every((f) => (socialForm[f.key] || "").trim())}
+                      style={{ height: "42px", fontSize: "0.88rem" }}>
+                      {socialSaving ? "Guardando..." : `Conectar ${platform.label}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="section-card" style={{ background: "var(--accent-subtle)", border: "1px solid rgba(201,105,43,0.15)" }}>
+        <p style={{ color: "var(--accent-secondary)", fontWeight: "700", fontSize: "0.85rem", marginBottom: "0.4rem" }}>¿Cómo funciona la publicación?</p>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.6", margin: 0 }}>
+          Una vez conectada la cuenta, genera tu campaña, copy o hashtags y haz clic en el botón <strong style={{ color: "var(--text-soft)" }}>Publicar</strong> que aparece en el resultado. Se abrirá un modal donde seleccionas la plataforma y publicas con un clic. Instagram requiere que también hayas generado una imagen.
+        </p>
+      </div>
+    </div>
+  );
+
   /* ── RENDER PRINCIPAL ── */
   return (
     <div className="app-shell">
@@ -689,6 +1771,8 @@ function Home() {
           {activeTab === "trends"    && renderTrends()}
           {activeTab === "history"   && renderHistory()}
           {activeTab === "calendar"  && renderCalendar()}
+          {activeTab === "social"    && renderSocialMedia()}
+          {activeTab === "video"     && renderVideo()}
           {(activeTab === "campaign" || activeTab === "copy" || activeTab === "hashtag") && (
             <>
               <CampaignForm
@@ -698,11 +1782,194 @@ function Home() {
                 handleGenerate={handleGenerate}
                 loading={loading}
               />
-              <ResultCard result={result} activeTab={activeTab} loading={loading} />
+              <ResultCard result={result} activeTab={activeTab} loading={loading} generationId={generationId} onFavorite={toggleFavorite} onPublish={() => setPublishModalOpen({ content: result, imageUrl })} />
+
+              {result && !loading && (
+                <div className="section-card" style={{ marginTop: "0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <div>
+                      <h2 className="section-title" style={{ margin: 0 }}>🎬 Video Script para esta pieza</h2>
+                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Genera un guion de video basado en el contenido generado</p>
+                    </div>
+                    {inlineVideoResult && (
+                      <button onClick={handleDownloadInlineVideo} style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1.1rem" }}>
+                    <div style={{ flex: 1, minWidth: "160px" }}>
+                      <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Formato</label>
+                      <select value={inlineVideoForm.format} onChange={(e) => setInlineVideoForm((f) => ({ ...f, format: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none" }}>
+                        {["Reel de Instagram", "TikTok", "YouTube Short", "Historia / Story", "YouTube largo", "LinkedIn Video"].map((f) => <option key={f}>{f}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: "140px" }}>
+                      <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Duración</label>
+                      <select value={inlineVideoForm.duration} onChange={(e) => setInlineVideoForm((f) => ({ ...f, duration: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none" }}>
+                        {["15 segundos", "30 segundos", "60 segundos", "3 minutos", "5 minutos"].map((d) => <option key={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <button className="btn-primary" onClick={handleGenerateInlineVideo}
+                      disabled={inlineVideoLoading || !formData.product.trim()}
+                      style={{ height: "38px", padding: "0 1.2rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                      {inlineVideoLoading ? "Generando..." : `🎬 ${inlineVideoResult ? "Regenerar" : "Generar"} Video Script`}
+                    </button>
+                  </div>
+
+                  {inlineVideoLoading && (
+                    <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                      <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", margin: "0 auto 1rem" }} />
+                      Escribiendo el guion escena por escena...
+                    </div>
+                  )}
+
+                  {!inlineVideoResult && !inlineVideoLoading && (
+                    <div style={{ minHeight: "100px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                      <span style={{ fontSize: "1.8rem" }}>🎬</span>
+                      <p style={{ margin: 0 }}>Elige formato y duración, luego haz clic en "Generar Video Script"</p>
+                    </div>
+                  )}
+
+                  {inlineVideoResult && !inlineVideoLoading && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                      <div style={{ background: "rgba(201,105,43,0.06)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "1rem" }}>
+                        <p style={{ fontSize: "0.68rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.4rem" }}>🎣 Hook — primeros 3 segundos</p>
+                        <p style={{ color: "var(--text-active)", fontSize: "1rem", fontWeight: "700", lineHeight: "1.5", margin: 0 }}>"{inlineVideoResult.hook}"</p>
+                      </div>
+
+                      <div>
+                        <p style={{ fontSize: "0.68rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>🎬 Escenas ({inlineVideoResult.scenes?.length})</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+                          {(inlineVideoResult.scenes || []).map((scene, i) => (
+                            <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 1fr", gap: "0.6rem", padding: "0.75rem", background: "var(--bg-tertiary)", borderRadius: "var(--border-radius-sm)", border: "1px solid var(--border-color)" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.2rem" }}>
+                                <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "800", fontSize: "0.72rem" }}>{i + 1}</div>
+                                <span style={{ fontSize: "0.58rem", color: "var(--text-muted)", fontWeight: "700", textAlign: "center" }}>{scene.time}</span>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.22rem" }}>
+                                <p style={{ fontSize: "0.77rem", color: "var(--text-soft)", margin: 0 }}><span style={{ fontWeight: "700" }}>📷 </span>{scene.visual}</p>
+                                <p style={{ fontSize: "0.77rem", color: "var(--text-main)", margin: 0 }}><span style={{ fontWeight: "700" }}>🎤 </span>{scene.narration}</p>
+                                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}>✂️ {scene.transition}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                        <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>📝 Caption</p>
+                            <button onClick={() => { navigator.clipboard.writeText(inlineVideoResult.caption); showToast("Caption copiado ✓", "success"); }}
+                              style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.18rem 0.5rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.68rem", fontWeight: "700" }}>
+                              Copiar
+                            </button>
+                          </div>
+                          <p style={{ fontSize: "0.79rem", color: "var(--text-main)", lineHeight: "1.6", margin: 0 }}>{inlineVideoResult.caption}</p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🚀 CTA</p>
+                            <p style={{ fontSize: "0.82rem", color: "var(--text-active)", fontWeight: "700", margin: 0 }}>{inlineVideoResult.cta}</p>
+                          </div>
+                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🎵 Música</p>
+                            <p style={{ fontSize: "0.79rem", color: "var(--text-soft)", margin: 0 }}>{inlineVideoResult.musicTip}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem" }}>
+                        <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.45rem" }}>💡 Tips de producción</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                          {(inlineVideoResult.productionTips || "").split(";").map((tip, i) => tip.trim() && (
+                            <div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                              <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "rgba(201,105,43,0.15)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: "800", flexShrink: 0, marginTop: "2px" }}>{i + 1}</span>
+                              <p style={{ fontSize: "0.79rem", color: "var(--text-soft)", margin: 0, lineHeight: "1.5" }}>{tip.trim()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "campaign" && result && !loading && (
+                <div className="section-card" style={{ marginTop: "0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <div>
+                      <h2 className="section-title" style={{ margin: 0 }}>Imagen para la campaña</h2>
+                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Descríbela tú o déjala en blanco para generarla automáticamente</p>
+                    </div>
+                    {imageUrl && !imageLoading && !imageError && (
+                      <button onClick={handleDownloadImage} style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Input descripción personalizada */}
+                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
+                    <input
+                      type="text"
+                      placeholder="Ej: cafetería acogedora con luz cálida, sin texto ni letras — o déjalo vacío para generar automáticamente"
+                      value={imagePrompt}
+                      onChange={(e) => setImagePrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleGenerateImage()}
+                      style={{ flex: 1, backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none" }}
+                    />
+                    <button className="btn-primary" onClick={handleGenerateImage} style={{ height: "38px", padding: "0 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                      🎨 {imageUrl ? "Regenerar" : "Generar imagen"}
+                    </button>
+                  </div>
+
+                  {!imageUrl ? (
+                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+                      <span style={{ fontSize: "2rem" }}>🎨</span>
+                      <p>Haz clic en "Generar imagen" para crear una visual para esta campaña</p>
+                    </div>
+                  ) : imageError ? (
+                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed rgba(248,113,113,0.2)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "#f87171", fontSize: "0.9rem" }}>
+                      <span style={{ fontSize: "2rem" }}>⚠️</span>
+                      <p>No se pudo generar la imagen. Intenta de nuevo.</p>
+                      <button className="btn-primary" onClick={handleGenerateImage} style={{ height: "36px", padding: "0 1rem", fontSize: "0.85rem" }}>Reintentar</button>
+                    </div>
+                  ) : (
+                    <div style={{ position: "relative", borderRadius: "var(--border-radius-md)", overflow: "hidden", background: "var(--bg-tertiary)", minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {imageLoading && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", background: "var(--bg-tertiary)", zIndex: 1 }}>
+                          <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" }} />
+                          <p className="pulse-element" style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>Generando imagen, puede tomar unos segundos...</p>
+                        </div>
+                      )}
+                      <img
+                        src={imageUrl}
+                        alt={`Campaña ${formData.product}`}
+                        onLoad={handleImageLoaded}
+                        onError={() => { setImageLoading(false); setImageError(true); }}
+                        style={{ width: "100%", borderRadius: "var(--border-radius-md)", display: imageLoading ? "none" : "block" }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
+      <PublishModal
+        isOpen={!!publishModalOpen}
+        onClose={() => { setPublishModalOpen(null); setHistorySearch(""); loadHistory(); }}
+        content={publishModalOpen?.content}
+        imageUrl={publishModalOpen?.imageUrl}
+      />
     </div>
   );
 }

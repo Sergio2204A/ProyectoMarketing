@@ -59,4 +59,24 @@ const toggleFavorite = async (req, res) => {
   }
 };
 
-module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite };
+const updateImageUrl = async (req, res) => {
+  try {
+    const generation = await Generation.findOne({
+      _id: req.params.id,
+      userId: req.user._id,
+    });
+
+    if (!generation) {
+      return res.status(404).json({ success: false, message: "No encontrado" });
+    }
+
+    generation.imageUrl = req.body.imageUrl || null;
+    await generation.save();
+
+    res.json({ success: true, imageUrl: generation.imageUrl });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl };

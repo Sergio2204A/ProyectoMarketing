@@ -19,7 +19,20 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: [true, "La contraseña es obligatoria"],
       minlength: 6,
-      select: false, // No devolver la contraseña en las consultas por defecto
+      select: false,
+    },
+    socialTokens: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+      select: false,
+    },
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      select: false,
     },
   },
   {

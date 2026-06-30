@@ -2,19 +2,19 @@ const { generateCopyAI } = require("../services/aiService");
 const Generation = require("../models/Generation");
 
 const generateCopy = async (req, res) => {
-  const { product, audience } = req.body;
+  const { product, audience, country, region } = req.body;
 
   try {
-    const copyText = await generateCopyAI(product, audience);
+    const copyText = await generateCopyAI(product, audience, country, region);
 
-    await Generation.create({
+    const saved = await Generation.create({
       userId: req.user._id,
       type: "copy",
-      input: { product, audience },
+      input: { product, audience, country, region },
       output: copyText,
     });
 
-    res.json({ success: true, copy: copyText });
+    res.json({ success: true, copy: copyText, generationId: saved._id });
   } catch (error) {
     res.status(500).json({
       success: false,

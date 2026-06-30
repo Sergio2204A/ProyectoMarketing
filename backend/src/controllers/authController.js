@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const User = require("../models/User");
+const { sendPasswordResetEmail } = require("../services/emailService");
 
 // Generar JWT
 const generateToken = (id) => {
@@ -100,4 +102,72 @@ const updateProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getMe, updateProfile };
+// @desc  Solicitar email de recuperación de contraseña
+// @route POST /auth/forgot-password
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  const genericMessage = "Si el email existe en nuestro sistema, recibirás un enlace de recuperación en unos minutos.";
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.json({ success: true, message: genericMessage });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hora
+    await user.save({ validateBeforeSave: false });
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const resetUrl = `${frontendUrl}/?resetToken=${rawToken}`;
+
+    await sendPasswordResetEmail(user.email, resetUrl);
+
+    res.json({ success: true, message: genericMessage });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc  Restablecer contraseña con token
+// @route POST /auth/reset-password/:token
+const resetPassword = async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  try {
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: "La contraseña debe tener al menos 6 caracteres" });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    }).select("+password +resetPasswordToken +resetPasswordExpires");
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: "El enlace de recuperación es inválido o ya expiró" });
+    }
+
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Contraseña actualizada correctamente",
+      token: generateToken(user._id),
+      user: { id: user._id, name: user.name, email: user.email },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { register, login, getMe, updateProfile, forgotPassword, resetPassword };

@@ -2,19 +2,19 @@ const { generateCampaignAI } = require("../services/aiService");
 const Generation = require("../models/Generation");
 
 const generateCampaign = async (req, res) => {
-  const { product, goal, audience, channel } = req.body;
+  const { product, goal, audience, channel, country, region } = req.body;
 
   try {
-    const campaignText = await generateCampaignAI(product, goal, audience, channel);
+    const campaignText = await generateCampaignAI(product, goal, audience, channel, country, region);
 
-    await Generation.create({
+    const saved = await Generation.create({
       userId: req.user._id,
       type: "campaign",
-      input: { product, goal, audience, channel },
+      input: { product, goal, audience, channel, country, region },
       output: campaignText,
     });
 
-    res.json({ success: true, campaign: campaignText });
+    res.json({ success: true, campaign: campaignText, generationId: saved._id });
   } catch (error) {
     res.status(500).json({
       success: false,

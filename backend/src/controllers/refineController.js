@@ -11,14 +11,14 @@ const refineContent = async (req, res) => {
   try {
     const refined = await refineContentAI(type, input, output);
 
-    await Generation.create({
+    const saved = await Generation.create({
       userId: req.user._id,
       type,
       input: { ...input, refined: true },
       output: refined,
     });
 
-    res.json({ success: true, refined });
+    res.json({ success: true, refined, generationId: saved._id });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
