@@ -66,6 +66,38 @@ export const generateVideoScriptAPI = async (data) => {
   return response.data;
 };
 
+export const generateImageOpenAIAPI = async (prompt, imageFile, size, quality) => {
+  const formData = new FormData();
+  formData.append("prompt", prompt);
+  if (imageFile) formData.append("image", imageFile);
+  if (size) formData.append("size", size);
+  if (quality) formData.append("quality", quality);
+  const response = await axios.post(`${API_URL}/image/generate`, formData, {
+    headers: { ...authHeader(), "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
+export const videoScriptChatAPI = async (messages, context) => {
+  const response = await axios.post(`${API_URL}/video/chat`, { messages, context }, { headers: authHeader() });
+  return response.data;
+};
+
+export const updateVideoUrlAPI = async (id, videoUrl) => {
+  const response = await axios.patch(`${API_URL}/history/${id}/video`, { videoUrl }, { headers: authHeader() });
+  return response.data;
+};
+
+export const updateOutputAPI = async (id, output) => {
+  const response = await axios.patch(`${API_URL}/history/${id}/output`, { output }, { headers: authHeader() });
+  return response.data;
+};
+
+export const saveGenerationAPI = async (type, input, output) => {
+  const response = await axios.post(`${API_URL}/history/save`, { type, input, output }, { headers: authHeader() });
+  return response.data;
+};
+
 export const generateRealVideoAPI = async (data) => {
   const response = await axios.post(`${API_URL}/video/real`, data, { headers: authHeader() });
   return response.data;

@@ -1,4 +1,4 @@
-const { generateVideoScriptAI } = require("../services/aiService");
+const { generateVideoScriptAI, generateVideoScriptChatAI } = require("../services/aiService");
 const Generation = require("../models/Generation");
 
 const RUNWAY_API_KEY = process.env.RUNWAY_API_KEY;
@@ -106,4 +106,17 @@ const getRealVideoStatus = async (req, res) => {
   }
 };
 
-module.exports = { generateVideoScript, generateRealVideo, getRealVideoStatus };
+const videoScriptChat = async (req, res) => {
+  const { messages, context } = req.body;
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ success: false, message: "Faltan los mensajes del chat." });
+  }
+  try {
+    const result = await generateVideoScriptChatAI(messages, context || {});
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { generateVideoScript, generateRealVideo, getRealVideoStatus, videoScriptChat };

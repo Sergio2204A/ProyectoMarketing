@@ -12,6 +12,7 @@ const trendsRoutes = require("./routes/trendsRoutes");
 const refineRoutes = require("./routes/refineRoutes");
 const publishRoutes = require("./routes/publishRoutes");
 const videoRoutes = require("./routes/videoRoutes");
+const imageRoutes = require("./routes/imageRoutes");
 
 const connectDB = require("./db");
 
@@ -34,6 +35,7 @@ app.use("/trends", trendsRoutes);
 app.use("/refine", refineRoutes);
 app.use("/publish", publishRoutes);
 app.use("/video", videoRoutes);
+app.use("/image", imageRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

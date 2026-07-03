@@ -208,6 +208,60 @@ Genera entre 4 y 7 escenas según la duración. Que sea viral, profesional y que
   return JSON.parse(clean);
 }
 
+async function generateVideoScriptChatAI(messages, context) {
+  const { product, format, duration, goal, audience, country, region } = context;
+  const locationCtx = country ? `- País: ${country}${region ? `, región: ${region}` : ""}` : "";
+
+  const systemPrompt = `Eres un director creativo y guionista de video viral especializado en marketing. Estás ayudando a un equipo de marketing a crear y refinar scripts de video.
+
+Contexto del proyecto:
+- Producto/Servicio: ${product || "por definir"}
+- Formato: ${format || "Reel de Instagram"}
+- Duración: ${duration || "30 segundos"}
+- Objetivo: ${goal || "generar engagement"}
+- Audiencia: ${audience || "público general"}
+${locationCtx}
+
+REGLAS:
+1. Si el usuario pide crear un script nuevo O refinarlo/modificarlo, responde ÚNICAMENTE con el JSON válido del script (sin texto antes ni después, sin bloques markdown).
+2. Si el usuario hace una pregunta general, pide consejo o saluda, responde como texto normal.
+3. Cuando respondas con JSON, aplica TODOS los cambios solicitados y devuelve el script COMPLETO actualizado.
+
+Estructura JSON obligatoria para scripts:
+{"hook":"...","scenes":[{"time":"0-5s","visual":"...","narration":"...","transition":"..."}],"caption":"...","cta":"...","musicTip":"...","productionTips":"tip1; tip2; tip3"}
+
+Genera entre 4 y 7 escenas según la duración.`;
+
+  if (!GROQ_API_KEY) throw new Error("Clave de API de Groq no configurada.");
+
+  const response = await fetch(GROQ_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      temperature: 0.8,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Error Groq: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error("La IA no devolvió contenido.");
+
+  try {
+    const clean = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/, "").trim();
+    const script = JSON.parse(clean);
+    return { type: "script", script };
+  } catch {
+    return { type: "text", text };
+  }
+}
+
 async function refineContentAI(type, input, originalOutput) {
   const typeLabels = { campaign: "campaña publicitaria", copy: "copy publicitario", hashtag: "set de hashtags" };
   const typeLabel = typeLabels[type] || "contenido de marketing";
@@ -255,4 +309,5 @@ module.exports = {
   generateTrendsAI,
   refineContentAI,
   generateVideoScriptAI,
+  generateVideoScriptChatAI,
 };

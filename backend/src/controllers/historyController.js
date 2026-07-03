@@ -79,4 +79,38 @@ const updateImageUrl = async (req, res) => {
   }
 };
 
-module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl };
+const updateVideoUrl = async (req, res) => {
+  try {
+    const generation = await Generation.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
+    generation.videoUrl = req.body.videoUrl || null;
+    await generation.save();
+    res.json({ success: true, videoUrl: generation.videoUrl });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const updateOutput = async (req, res) => {
+  try {
+    const generation = await Generation.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
+    generation.output = req.body.output;
+    await generation.save();
+    res.json({ success: true, output: generation.output });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const saveGeneration = async (req, res) => {
+  try {
+    const { type, input, output } = req.body;
+    const saved = await Generation.create({ userId: req.user._id, type, input: input || {}, output });
+    res.json({ success: true, generation: saved });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, saveGeneration };

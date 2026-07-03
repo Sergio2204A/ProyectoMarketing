@@ -22,6 +22,11 @@ import {
   generateVideoScriptAPI,
   generateRealVideoAPI,
   getRealVideoStatusAPI,
+  generateImageOpenAIAPI,
+  videoScriptChatAPI,
+  updateOutputAPI,
+  updateVideoUrlAPI,
+  saveGenerationAPI,
 } from "../services/campaignService";
 
 const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario", video: "Video Script" };
@@ -68,6 +73,9 @@ function Home() {
   const [refineResult, setRefineResult] = useState("");
   const [refineLoading, setRefineLoading] = useState(false);
   const [detailModal, setDetailModal] = useState(null);
+  const [detailEditMode, setDetailEditMode] = useState(false);
+  const [detailEditContent, setDetailEditContent] = useState("");
+  const [detailSaving, setDetailSaving] = useState(false);
   const [detailImageUrl, setDetailImageUrl] = useState(null);
   const [detailImageLoading, setDetailImageLoading] = useState(false);
   const [detailImageError, setDetailImageError] = useState(false);
@@ -75,6 +83,9 @@ function Home() {
   const [detailVideoForm, setDetailVideoForm] = useState({ format: "Reel de Instagram", duration: "30 segundos" });
   const [detailVideoResult, setDetailVideoResult] = useState(null);
   const [detailVideoLoading, setDetailVideoLoading] = useState(false);
+  const [detailAttachedVideo, setDetailAttachedVideo] = useState(null);
+  const [detailVideoLinkInput, setDetailVideoLinkInput] = useState("");
+  const detailVideoFileRef = useRef(null);
   const [publishModalOpen, setPublishModalOpen] = useState(null);
   const [socialCreds, setSocialCreds] = useState({ facebook: { connected: false }, instagram: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } });
   const [socialLoadingCreds, setSocialLoadingCreds] = useState(false);
@@ -90,6 +101,24 @@ function Home() {
   const [videoResult, setVideoResult] = useState(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoGenerationId, setVideoGenerationId] = useState(null);
+
+  const [videoStudioMessages, setVideoStudioMessages] = useState([]);
+  const [videoStudioInput, setVideoStudioInput] = useState("");
+  const [videoStudioLoading, setVideoStudioLoading] = useState(false);
+  const [videoStudioContext, setVideoStudioContext] = useState({ format: "Reel de Instagram", duration: "30 segundos", product: "", goal: "", audience: "" });
+  const [videoStudioFile, setVideoStudioFile] = useState(null);
+  const [videoStudioFilePreview, setVideoStudioFilePreview] = useState(null);
+  const videoStudioFileRef = useRef(null);
+  const videoStudioBottomRef = useRef(null);
+
+  const [studioMessages, setStudioMessages] = useState([]);
+  const [studioPrompt, setStudioPrompt] = useState("");
+  const [studioFile, setStudioFile] = useState(null);
+  const [studioFilePreview, setStudioFilePreview] = useState(null);
+  const [studioLoading, setStudioLoading] = useState(false);
+  const [studioSize, setStudioSize] = useState("1024x1024");
+  const studioFileRef = useRef(null);
+  const studioBottomRef = useRef(null);
 
   const [realVideoDuration, setRealVideoDuration] = useState(5);
   const [realVideoStatus, setRealVideoStatus] = useState("idle"); // idle | starting | processing | done | error
@@ -248,22 +277,55 @@ function Home() {
     setImageLoading(false);
   };
 
+  const outputToString = (output) => {
+    if (!output) return "";
+    if (Array.isArray(output)) return output.join("\n");
+    if (typeof output === "object") return JSON.stringify(output, null, 2);
+    return output;
+  };
+
   const openDetailModal = (item) => {
     setDetailModal(item);
+    setDetailEditMode(false);
+    setDetailEditContent(outputToString(item.output));
     setDetailImageUrl(item.imageUrl || null);
     setDetailImagePrompt("");
     setDetailImageError(false);
     setDetailImageLoading(false);
     setDetailVideoResult(null);
     setDetailVideoLoading(false);
+    setDetailAttachedVideo(item.videoUrl || null);
+    setDetailVideoLinkInput("");
   };
 
   const closeDetailModal = () => {
     setDetailModal(null);
+    setDetailEditMode(false);
+    setDetailEditContent("");
     setDetailImageUrl(null);
     setDetailImagePrompt("");
     setDetailImageError(false);
     setDetailVideoResult(null);
+    setDetailAttachedVideo(null);
+    setDetailVideoLinkInput("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!detailModal) return;
+    setDetailSaving(true);
+    try {
+      let parsed = detailEditContent;
+      try { parsed = JSON.parse(detailEditContent); } catch {}
+      await updateOutputAPI(String(detailModal._id), parsed);
+      setDetailModal((prev) => ({ ...prev, output: parsed }));
+      setHistory((prev) => prev.map((h) => h._id === detailModal._id ? { ...h, output: parsed } : h));
+      setDetailEditMode(false);
+      showToast("Contenido guardado ✓", "success");
+    } catch {
+      showToast("No se pudo guardar", "error");
+    } finally {
+      setDetailSaving(false);
+    }
   };
 
   const handleGenerateDetailImage = () => {
@@ -517,7 +579,10 @@ function Home() {
                 <span className="quick-action-icon">📈</span>Tendencias
               </button>
               <button className="quick-action-btn" onClick={() => setActiveTab("video")}>
-                <span className="quick-action-icon">🎬</span>Video Script
+                <span className="quick-action-icon">🎬</span>Video Studio
+              </button>
+              <button className="quick-action-btn" onClick={() => setActiveTab("imagestudio")}>
+                <span className="quick-action-icon">🎨</span>Estudio de Imagen
               </button>
               <button className="quick-action-btn" onClick={() => setActiveTab("history")}>
                 <span className="quick-action-icon">🕒</span>Historial
@@ -692,6 +757,520 @@ function Home() {
       </div>
     );
   };
+
+  /* ── VIDEO STUDIO (chat) ── */
+  const handleVideoStudioFileChange = (file) => {
+    if (!file) return;
+    setVideoStudioFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setVideoStudioFilePreview(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleVideoStudioSend = async () => {
+    if (!videoStudioInput.trim() && !videoStudioFile) return;
+    const baseText = videoStudioInput.trim() || "Crea un script de video de marketing";
+    const fileNote = videoStudioFile ? `\n\n[Imagen de referencia adjunta: "${videoStudioFile.name}" — úsala como inspiración visual para las escenas, paleta de colores y estética del video]` : "";
+    const userText = baseText + fileNote;
+    const newUserMsg = { role: "user", content: userText };
+    const history = [...videoStudioMessages.map((m) => ({ role: m.role, content: m.rawContent || m.content })), newUserMsg];
+    const pendingId = Date.now();
+    const filePreviewSnapshot = videoStudioFilePreview;
+    const fileNameSnapshot = videoStudioFile?.name;
+    setVideoStudioMessages((prev) => [
+      ...prev,
+      { id: pendingId - 1, role: "user", content: baseText, rawContent: userText, filePreview: filePreviewSnapshot, fileName: fileNameSnapshot },
+      { id: pendingId, role: "assistant", content: null, script: null, loading: true },
+    ]);
+    setVideoStudioInput("");
+    setVideoStudioFile(null);
+    setVideoStudioFilePreview(null);
+    setVideoStudioLoading(true);
+    setTimeout(() => videoStudioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    try {
+      const data = await videoScriptChatAPI(history, videoStudioContext);
+      setVideoStudioMessages((prev) => prev.map((m) =>
+        m.id === pendingId
+          ? { ...m, loading: false, script: data.type === "script" ? data.script : null, content: data.type === "text" ? data.text : null, rawContent: data.type === "script" ? JSON.stringify(data.script) : data.text }
+          : m
+      ));
+    } catch (err) {
+      setVideoStudioMessages((prev) => prev.map((m) =>
+        m.id === pendingId ? { ...m, loading: false, content: "⚠️ " + (err.response?.data?.message || "Error al generar el script"), error: true } : m
+      ));
+    } finally {
+      setVideoStudioLoading(false);
+      setTimeout(() => videoStudioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  };
+
+  const handleDownloadVideoStudioScript = (script, idx) => {
+    if (!script) return;
+    const lines = [
+      `SCRIPT DE VIDEO — ${videoStudioContext.product || "Marketing"}`,
+      `Formato: ${videoStudioContext.format} | Duración: ${videoStudioContext.duration}`,
+      "", `🎣 HOOK: ${script.hook}`, "",
+      "🎬 ESCENAS:",
+      ...(script.scenes || []).map((s, i) => `  Escena ${i + 1} (${s.time})\n  📷 ${s.visual}\n  🎤 ${s.narration}\n  ✂️ ${s.transition}`),
+      "", `📝 CAPTION:\n${script.caption}`, "",
+      `🚀 CTA: ${script.cta}`, "", `🎵 MÚSICA: ${script.musicTip}`, "",
+      `💡 TIPS:\n${script.productionTips}`,
+    ].join("\n");
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `video-script-${Date.now()}.txt`;
+    a.click();
+  };
+
+  const renderVideoStudio = () => (
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)", gap: 0 }}>
+      {/* Header con contexto */}
+      <div className="section-card" style={{ flexShrink: 0, marginBottom: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+          <div>
+            <span className="section-title">🎬 Video Studio</span>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", margin: "0.25rem 0 0" }}>
+              Describe el video que necesitas, pide cambios y la IA lo refina en tiempo real.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+            <input placeholder="Producto / servicio" value={videoStudioContext.product}
+              onChange={(e) => setVideoStudioContext((c) => ({ ...c, product: e.target.value }))}
+              style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.38rem 0.7rem", color: "var(--text-active)", fontSize: "0.8rem", outline: "none", width: "160px" }} />
+            <select value={videoStudioContext.format} onChange={(e) => setVideoStudioContext((c) => ({ ...c, format: e.target.value }))}
+              style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.38rem 0.7rem", color: "var(--text-active)", fontSize: "0.8rem", outline: "none" }}>
+              {["Reel de Instagram", "TikTok", "YouTube Short", "Historia / Story", "YouTube largo", "LinkedIn Video"].map((f) => <option key={f}>{f}</option>)}
+            </select>
+            <select value={videoStudioContext.duration} onChange={(e) => setVideoStudioContext((c) => ({ ...c, duration: e.target.value }))}
+              style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.38rem 0.7rem", color: "var(--text-active)", fontSize: "0.8rem", outline: "none" }}>
+              {["15 segundos", "30 segundos", "60 segundos", "3 minutos", "5 minutos"].map((d) => <option key={d}>{d}</option>)}
+            </select>
+            {videoStudioMessages.length > 0 && (
+              <button onClick={() => setVideoStudioMessages([])}
+                style={{ background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.38rem 0.8rem", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem" }}>
+                Nueva sesión
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Área de conversación */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "1.5rem", padding: "0.5rem 0.25rem" }}>
+        {videoStudioMessages.length === 0 && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem", color: "var(--text-muted)", textAlign: "center", padding: "3rem 1rem" }}>
+            <div style={{ fontSize: "3.5rem" }}>🎬</div>
+            <p style={{ fontSize: "1rem", fontWeight: "700", color: "var(--text-soft)", margin: 0 }}>¿Qué video necesitas crear hoy?</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, maxWidth: "380px", lineHeight: "1.6" }}>
+              Describe el video, pide ajustes en cualquier momento y el equipo puede iterar hasta que quede perfecto.
+            </p>
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", justifyContent: "center", marginTop: "0.5rem" }}>
+              {[
+                "Crea un Reel de 30s para lanzar un nuevo producto de skincare dirigido a mujeres de 25-35 años",
+                "Genera un script para TikTok de 15 segundos muy energético para vender ropa deportiva",
+                "Necesito un video de YouTube de 3 minutos para explicar los beneficios de un curso online de marketing",
+              ].map((ex) => (
+                <button key={ex} onClick={() => setVideoStudioInput(ex)}
+                  style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.4rem 0.9rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem", textAlign: "left" }}>
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {videoStudioMessages.map((msg, idx) => (
+          <div key={msg.id}>
+            {msg.role === "user" ? (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div style={{ maxWidth: "70%", display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-end" }}>
+                  {msg.filePreview && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "12px", padding: "0.4rem 0.6rem" }}>
+                      <img src={msg.filePreview} alt="ref" style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "6px" }} />
+                      <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.85)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.fileName}</span>
+                    </div>
+                  )}
+                  <div style={{ background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", padding: "0.65rem 1rem", borderRadius: "18px 18px 4px 18px", color: "#fff", fontSize: "0.875rem", lineHeight: "1.5" }}>
+                    {msg.content}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>🎬</div>
+                <div style={{ flex: 1 }}>
+                  {msg.loading && (
+                    <div style={{ padding: "1rem 1.25rem", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "4px 18px 18px 18px", display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                      <div className="pulse-element" style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", flexShrink: 0 }} />
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.83rem" }}>Escribiendo el guion...</span>
+                    </div>
+                  )}
+                  {!msg.loading && msg.content && (
+                    <div style={{ padding: "0.75rem 1rem", background: msg.error ? "rgba(239,68,68,0.08)" : "var(--bg-secondary)", border: `1px solid ${msg.error ? "rgba(239,68,68,0.25)" : "var(--border-color)"}`, borderRadius: "4px 18px 18px 18px", color: msg.error ? "#fca5a5" : "var(--text-main)", fontSize: "0.875rem", lineHeight: "1.6" }}>
+                      {msg.content}
+                    </div>
+                  )}
+                  {!msg.loading && msg.script && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                      {/* Hook */}
+                      <div style={{ background: "rgba(201,105,43,0.07)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "4px 18px 18px 18px", padding: "0.9rem 1.1rem" }}>
+                        <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 0.35rem" }}>🎣 Hook</p>
+                        <p style={{ color: "var(--text-active)", fontSize: "0.95rem", fontWeight: "700", lineHeight: "1.5", margin: 0 }}>"{msg.script.hook}"</p>
+                      </div>
+                      {/* Escenas */}
+                      <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "0.9rem 1.1rem" }}>
+                        <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 0.6rem" }}>🎬 Escenas ({msg.script.scenes?.length})</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          {(msg.script.scenes || []).map((s, i) => (
+                            <div key={i} style={{ display: "grid", gridTemplateColumns: "40px 1fr", gap: "0.5rem", padding: "0.6rem", background: "var(--bg-tertiary)", borderRadius: "var(--border-radius-sm)", border: "1px solid var(--border-color)" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.15rem" }}>
+                                <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "800", fontSize: "0.7rem" }}>{i + 1}</div>
+                                <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: "700", textAlign: "center" }}>{s.time}</span>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.18rem" }}>
+                                <p style={{ fontSize: "0.76rem", color: "var(--text-soft)", margin: 0 }}>📷 {s.visual}</p>
+                                <p style={{ fontSize: "0.76rem", color: "var(--text-main)", margin: 0 }}>🎤 {s.narration}</p>
+                                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}>✂️ {s.transition}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Caption + CTA + música */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "0.75rem 1rem" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+                            <p style={{ fontSize: "0.63rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>📝 Caption</p>
+                            <button onClick={() => { navigator.clipboard.writeText(msg.script.caption); showToast("Caption copiado ✓", "success"); }}
+                              style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.12rem 0.4rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.63rem", fontWeight: "700" }}>
+                              Copiar
+                            </button>
+                          </div>
+                          <p style={{ fontSize: "0.76rem", color: "var(--text-main)", lineHeight: "1.55", margin: 0 }}>{msg.script.caption}</p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "0.75rem 1rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.63rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 0.25rem" }}>🚀 CTA</p>
+                            <p style={{ fontSize: "0.8rem", color: "var(--text-active)", fontWeight: "700", margin: 0 }}>{msg.script.cta}</p>
+                          </div>
+                          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "0.75rem 1rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.63rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 0.25rem" }}>🎵 Música</p>
+                            <p style={{ fontSize: "0.76rem", color: "var(--text-soft)", margin: 0 }}>{msg.script.musicTip}</p>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Tips + acciones */}
+                      <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "0.75rem 1rem" }}>
+                        <p style={{ fontSize: "0.63rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 0.4rem" }}>💡 Tips de producción</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                          {(msg.script.productionTips || "").split(";").map((t, i) => t.trim() && (
+                            <div key={i} style={{ display: "flex", gap: "0.4rem", alignItems: "flex-start" }}>
+                              <span style={{ width: "16px", height: "16px", borderRadius: "50%", background: "rgba(201,105,43,0.15)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.58rem", fontWeight: "800", flexShrink: 0, marginTop: "2px" }}>{i + 1}</span>
+                              <p style={{ fontSize: "0.76rem", color: "var(--text-soft)", margin: 0, lineHeight: "1.5" }}>{t.trim()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <button onClick={() => handleDownloadVideoStudioScript(msg.script, idx)}
+                          style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                          Descargar
+                        </button>
+                        <button onClick={() => {
+                          const full = [
+                            `🎣 HOOK: ${msg.script.hook}`, "",
+                            "🎬 ESCENAS:",
+                            ...(msg.script.scenes || []).map((s, i) => `  Escena ${i+1} (${s.time})\n  📷 ${s.visual}\n  🎤 ${s.narration}\n  ✂️ ${s.transition}`),
+                            "", `📝 CAPTION:\n${msg.script.caption}`, "",
+                            `🚀 CTA: ${msg.script.cta}`, `🎵 MÚSICA: ${msg.script.musicTip}`, "",
+                            `💡 TIPS: ${msg.script.productionTips}`,
+                          ].join("\n");
+                          navigator.clipboard.writeText(full);
+                          showToast("Script copiado al portapapeles ✓", "success");
+                        }}
+                          style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
+                          📋 Copiar todo
+                        </button>
+                        <button onClick={async () => {
+                          try {
+                            await saveGenerationAPI("video", { product: videoStudioContext.product, format: videoStudioContext.format, duration: videoStudioContext.duration, goal: videoStudioContext.goal, audience: videoStudioContext.audience }, msg.script);
+                            showToast("Script guardado en el historial ✓", "success");
+                          } catch { showToast("No se pudo guardar", "error"); }
+                        }}
+                          style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "700" }}>
+                          💾 Guardar en historial
+                        </button>
+                        <button onClick={() => setVideoStudioInput("Refina este script y hazlo más impactante")}
+                          style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
+                          ✨ Refinar
+                        </button>
+                        <button onClick={() => setVideoStudioInput("Crea una variación diferente de este script")}
+                          style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
+                          🔄 Variar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        <div ref={videoStudioBottomRef} />
+      </div>
+
+      {/* Input inferior */}
+      <div style={{ flexShrink: 0, paddingTop: "0.75rem" }}>
+        {/* Preview archivo adjunto */}
+        {videoStudioFilePreview && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)" }}>
+            <img src={videoStudioFilePreview} alt="referencia" style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--border-color)" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: "0.78rem", color: "var(--text-soft)", margin: 0, fontWeight: "600", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{videoStudioFile?.name}</p>
+              <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: "0.1rem 0 0" }}>Imagen de referencia visual para el script</p>
+            </div>
+            <button onClick={() => { setVideoStudioFile(null); setVideoStudioFilePreview(null); }}
+              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem", lineHeight: 1, padding: "0.2rem" }}>✕</button>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "0.6rem 0.75rem" }}>
+          {/* Input oculto de archivo */}
+          <input type="file" accept="image/*,video/*" ref={videoStudioFileRef} style={{ display: "none" }} onChange={(e) => handleVideoStudioFileChange(e.target.files[0])} />
+
+          {/* Botón adjuntar */}
+          <button onClick={() => videoStudioFileRef.current?.click()} title="Adjuntar imagen o referencia visual"
+            style={{ background: videoStudioFile ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" : "rgba(201,105,43,0.15)", border: "1.5px solid var(--accent-secondary)", color: videoStudioFile ? "#fff" : "var(--accent-secondary)", cursor: "pointer", padding: "0.42rem", borderRadius: "8px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", boxShadow: "0 0 8px rgba(201,105,43,0.25)" }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+
+          <textarea
+            value={videoStudioInput}
+            onChange={(e) => setVideoStudioInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!videoStudioLoading) handleVideoStudioSend(); } }}
+            placeholder='Describe el video, adjunta una imagen de referencia, o pide cambios: "hazlo más energético", "cambia la escena 2"…'
+            rows={1}
+            style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", color: "var(--text-active)", fontSize: "0.9rem", lineHeight: "1.5", maxHeight: "120px", overflowY: "auto", paddingTop: "0.25rem" }}
+          />
+
+          {/* Botón enviar — prominente */}
+          <button
+            onClick={handleVideoStudioSend}
+            disabled={videoStudioLoading || (!videoStudioInput.trim() && !videoStudioFile)}
+            style={{
+              background: videoStudioLoading || (!videoStudioInput.trim() && !videoStudioFile)
+                ? "var(--bg-tertiary)"
+                : "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))",
+              border: "none",
+              borderRadius: "999px",
+              padding: "0.52rem 1.1rem",
+              cursor: videoStudioLoading || (!videoStudioInput.trim() && !videoStudioFile) ? "default" : "pointer",
+              display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0,
+              boxShadow: videoStudioLoading || (!videoStudioInput.trim() && !videoStudioFile)
+                ? "none"
+                : "0 0 16px rgba(201,105,43,0.45)",
+              transition: "box-shadow 0.2s, background 0.2s",
+            }}>
+            {videoStudioLoading ? (
+              <>
+                <div className="pulse-element" style={{ width: "14px", height: "14px", borderRadius: "50%", background: "var(--accent-secondary)" }} />
+                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: "600" }}>Generando…</span>
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span style={{ fontSize: "0.8rem", color: "#fff", fontWeight: "700" }}>Generar</span>
+              </>
+            )}
+          </button>
+        </div>
+        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textAlign: "center", marginTop: "0.4rem" }}>
+          Enter para enviar · Shift+Enter para nueva línea · Adjunta imágenes de referencia con el clip
+        </p>
+      </div>
+    </div>
+  );
+
+  /* ── ESTUDIO DE IMAGEN ── */
+  const handleStudioFileChange = (file) => {
+    if (!file) return;
+    setStudioFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setStudioFilePreview(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleStudioSend = async () => {
+    if (!studioPrompt.trim() && !studioFile) return;
+    const prompt = studioPrompt.trim() || "Genera una imagen de marketing profesional";
+    setStudioLoading(true);
+    const pendingMsg = { id: Date.now(), prompt, referencePreview: studioFilePreview, result: null, error: null };
+    setStudioMessages((prev) => [...prev, pendingMsg]);
+    setStudioPrompt("");
+    setStudioFile(null);
+    setStudioFilePreview(null);
+    setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    try {
+      const data = await generateImageOpenAIAPI(prompt, studioFile, studioSize);
+      const dataUrl = `data:${data.mimeType};base64,${data.b64}`;
+      setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, result: dataUrl } : m));
+    } catch (err) {
+      const msg = err.response?.data?.message || "Error al generar la imagen";
+      setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, error: msg } : m));
+    } finally {
+      setStudioLoading(false);
+      setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  };
+
+  const handleStudioDownload = (dataUrl, idx) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `imagen-marketing-${idx + 1}-${Date.now()}.png`;
+    a.click();
+  };
+
+  const renderImageStudio = () => (
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)", gap: 0 }}>
+      {/* Header */}
+      <div className="section-card" style={{ flexShrink: 0, marginBottom: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+          <div>
+            <span className="section-title">🎨 Estudio de Imagen</span>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", margin: "0.25rem 0 0" }}>
+              Describe la imagen que necesitas, adjunta tu logo o una imagen de referencia, y la IA la crea para ti.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+            <label style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Tamaño</label>
+            <select value={studioSize} onChange={(e) => setStudioSize(e.target.value)}
+              style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.7rem", color: "var(--text-active)", fontSize: "0.8rem", outline: "none" }}>
+              <option value="1024x1024">1:1 Cuadrado</option>
+              <option value="1792x1024">16:9 Horizontal</option>
+              <option value="1024x1792">9:16 Vertical / Story</option>
+            </select>
+            {studioMessages.length > 0 && (
+              <button onClick={() => setStudioMessages([])}
+                style={{ background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.8rem", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem" }}>
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Área de conversación */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "1.5rem", padding: "0.5rem 0.25rem" }}>
+        {studioMessages.length === 0 && !studioLoading && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem", color: "var(--text-muted)", textAlign: "center", padding: "3rem 1rem" }}>
+            <div style={{ fontSize: "3.5rem" }}>🎨</div>
+            <p style={{ fontSize: "1rem", fontWeight: "700", color: "var(--text-soft)", margin: 0 }}>¿Qué imagen necesitas hoy?</p>
+            <p style={{ fontSize: "0.85rem", margin: 0, maxWidth: "360px", lineHeight: "1.6" }}>
+              Describe la imagen, adjunta tu logo o una foto de referencia para que la IA mantenga el estilo o lo incorpore.
+            </p>
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", justifyContent: "center", marginTop: "0.5rem" }}>
+              {["Foto de producto sobre fondo blanco con sombra sutil", "Banner para redes sociales con colores vibrantes", "Imagen de campaña con logo de referencia adjunto"].map((ex) => (
+                <button key={ex} onClick={() => setStudioPrompt(ex)}
+                  style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.4rem 0.9rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {studioMessages.map((msg, idx) => (
+          <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+            {/* Prompt del usuario */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem" }}>
+              <div style={{ maxWidth: "72%", display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end" }}>
+                {msg.referencePreview && (
+                  <img src={msg.referencePreview} alt="referencia" style={{ maxWidth: "160px", maxHeight: "120px", borderRadius: "var(--border-radius-md)", objectFit: "cover", border: "1px solid var(--border-color)" }} />
+                )}
+                <div style={{ background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", padding: "0.65rem 1rem", borderRadius: "18px 18px 4px 18px", color: "#fff", fontSize: "0.875rem", lineHeight: "1.5" }}>
+                  {msg.prompt}
+                </div>
+              </div>
+            </div>
+
+            {/* Resultado de la IA */}
+            <div style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+              <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>🎨</div>
+              <div style={{ flex: 1 }}>
+                {!msg.result && !msg.error && (
+                  <div style={{ padding: "1rem", background: "var(--bg-secondary)", borderRadius: "4px 18px 18px 18px", border: "1px solid var(--border-color)" }}>
+                    <div className="pulse-element" style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" }} />
+                  </div>
+                )}
+                {msg.error && (
+                  <div style={{ padding: "0.75rem 1rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: "4px 18px 18px 18px", color: "#fca5a5", fontSize: "0.85rem" }}>
+                    ⚠️ {msg.error}
+                  </div>
+                )}
+                {msg.result && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    <img src={msg.result} alt={`Imagen ${idx + 1}`}
+                      style={{ maxWidth: "480px", width: "100%", borderRadius: "var(--border-radius-md)", display: "block", border: "1px solid var(--border-color)" }} />
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button onClick={() => handleStudioDownload(msg.result, idx)}
+                        style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                      <button onClick={() => setStudioPrompt(`Varía esta imagen: ${msg.prompt}`)}
+                        style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
+                        🔄 Variar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div ref={studioBottomRef} />
+      </div>
+
+      {/* Input inferior tipo ChatGPT */}
+      <div style={{ flexShrink: 0, paddingTop: "0.75rem" }}>
+        {studioFilePreview && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)" }}>
+            <img src={studioFilePreview} alt="adjunto" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--border-color)" }} />
+            <span style={{ fontSize: "0.8rem", color: "var(--text-soft)", flex: 1 }}>{studioFile?.name}</span>
+            <button onClick={() => { setStudioFile(null); setStudioFilePreview(null); }}
+              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem", lineHeight: 1 }}>✕</button>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "0.6rem 0.75rem" }}>
+          <input type="file" accept="image/*" ref={studioFileRef} style={{ display: "none" }} onChange={(e) => handleStudioFileChange(e.target.files[0])} />
+          <button onClick={() => studioFileRef.current?.click()} title="Adjuntar imagen o logo"
+            style={{ background: "none", border: "none", color: studioFile ? "var(--accent-secondary)" : "var(--text-muted)", cursor: "pointer", padding: "0.35rem", borderRadius: "6px", flexShrink: 0, display: "flex", alignItems: "center" }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <textarea
+            value={studioPrompt}
+            onChange={(e) => setStudioPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!studioLoading) handleStudioSend(); } }}
+            placeholder="Describe la imagen… o adjunta tu logo y di cómo usarlo"
+            rows={1}
+            style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", color: "var(--text-active)", fontSize: "0.9rem", lineHeight: "1.5", maxHeight: "120px", overflowY: "auto", paddingTop: "0.25rem" }}
+          />
+          <button onClick={handleStudioSend} disabled={studioLoading || (!studioPrompt.trim() && !studioFile)}
+            style={{ background: studioLoading || (!studioPrompt.trim() && !studioFile) ? "var(--bg-tertiary)" : "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", border: "none", borderRadius: "8px", padding: "0.5rem 0.65rem", cursor: studioLoading || (!studioPrompt.trim() && !studioFile) ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {studioLoading
+              ? <div className="pulse-element" style={{ width: "18px", height: "18px", borderRadius: "50%", background: "var(--accent-secondary)" }} />
+              : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            }
+          </button>
+        </div>
+        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textAlign: "center", marginTop: "0.4rem" }}>
+          Enter para enviar · Shift+Enter para nueva línea · 📎 adjunta logo o imagen de referencia
+        </p>
+      </div>
+    </div>
+  );
 
   /* ── VIDEO SCRIPT ── */
   const handleGenerateVideo = async () => {
@@ -1248,18 +1827,43 @@ function Home() {
                   {detailModal.input?.product || "Sin nombre"}
                 </h3>
               </div>
-              <button onClick={closeDetailModal} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.3rem", lineHeight: 1, flexShrink: 0 }}>✕</button>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexShrink: 0 }}>
+                {!detailEditMode ? (
+                  <button
+                    onClick={() => { setDetailEditContent(outputToString(detailModal.output)); setDetailEditMode(true); }}
+                    style={{ display: "flex", alignItems: "center", gap: "0.35rem", background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.75rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.78rem", fontWeight: "700" }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Editar
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={handleSaveEdit} disabled={detailSaving}
+                      style={{ display: "flex", alignItems: "center", gap: "0.35rem", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", border: "none", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.75rem", color: "#fff", cursor: detailSaving ? "default" : "pointer", fontSize: "0.78rem", fontWeight: "700" }}>
+                      {detailSaving ? "Guardando…" : "✓ Guardar"}
+                    </button>
+                    <button onClick={() => setDetailEditMode(false)}
+                      style={{ background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.6rem", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.78rem" }}>
+                      Cancelar
+                    </button>
+                  </>
+                )}
+                <button onClick={closeDetailModal} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.3rem", lineHeight: 1 }}>✕</button>
+              </div>
             </div>
 
             {/* Contenido scrollable */}
             <div style={{ overflowY: "auto", flex: 1, padding: "1.5rem 1.75rem" }}>
-              <div style={{ background: "rgba(11,15,25,0.5)", border: "1px solid var(--border-color)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.75rem", fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.85", whiteSpace: "pre-wrap" }}>
-                {Array.isArray(detailModal.output)
-                  ? detailModal.output.join("\n")
-                  : typeof detailModal.output === "object"
-                  ? JSON.stringify(detailModal.output, null, 2)
-                  : detailModal.output}
-              </div>
+              {detailEditMode ? (
+                <textarea
+                  value={detailEditContent}
+                  onChange={(e) => setDetailEditContent(e.target.value)}
+                  style={{ width: "100%", minHeight: "260px", background: "rgba(11,15,25,0.6)", border: "1.5px solid var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "1.25rem", fontSize: "0.93rem", color: "var(--text-active)", lineHeight: "1.8", resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+              ) : (
+                <div style={{ background: "rgba(11,15,25,0.5)", border: "1px solid var(--border-color)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.75rem", fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.85", whiteSpace: "pre-wrap" }}>
+                  {outputToString(detailModal.output)}
+                </div>
+              )}
 
               {/* Imagen — generación y edición para campañas */}
               {detailModal.type === "campaign" && (
@@ -1435,6 +2039,103 @@ function Home() {
                   )}
                 </div>
               )}
+
+              {/* ── Sección adjuntar video propio ── */}
+              <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border-color)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem" }}>
+                  <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
+                    🎞️ Video adjunto a esta campaña
+                  </p>
+                  {detailAttachedVideo && (
+                    <button onClick={async () => {
+                      await updateVideoUrlAPI(String(detailModal._id), null);
+                      setDetailAttachedVideo(null);
+                      setHistory((prev) => prev.map((h) => h._id === detailModal._id ? { ...h, videoUrl: null } : h));
+                      showToast("Video eliminado", "success");
+                    }}
+                      style={{ background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.2rem 0.6rem", color: "#f87171", cursor: "pointer", fontSize: "0.72rem" }}>
+                      Quitar video
+                    </button>
+                  )}
+                </div>
+
+                {/* Reproductor si hay video */}
+                {detailAttachedVideo && (
+                  <div style={{ marginBottom: "1rem" }}>
+                    {detailAttachedVideo.includes("youtube.com") || detailAttachedVideo.includes("youtu.be") ? (
+                      <iframe
+                        src={`https://www.youtube.com/embed/${detailAttachedVideo.split("v=")[1]?.split("&")[0] || detailAttachedVideo.split("/").pop()}`}
+                        style={{ width: "100%", height: "300px", borderRadius: "var(--border-radius-md)", border: "none" }}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : detailAttachedVideo.startsWith("data:video") || /\.(mp4|webm|mov|ogg)$/i.test(detailAttachedVideo) ? (
+                      <video controls style={{ width: "100%", borderRadius: "var(--border-radius-md)", maxHeight: "320px", background: "#000" }}>
+                        <source src={detailAttachedVideo} />
+                      </video>
+                    ) : (
+                      <a href={detailAttachedVideo} target="_blank" rel="noopener noreferrer"
+                        style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.75rem 1rem", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--accent-secondary)", fontSize: "0.85rem", textDecoration: "none", fontWeight: "600" }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                        Ver video adjunto →
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Controles para subir o enlazar */}
+                <input type="file" accept="video/*" ref={detailVideoFileRef} style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    if (file.size > 50 * 1024 * 1024) {
+                      showToast("El video supera 50MB. Usa un enlace de YouTube, Drive o Dropbox.", "error");
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                      const dataUrl = ev.target.result;
+                      setDetailAttachedVideo(dataUrl);
+                      try {
+                        await updateVideoUrlAPI(String(detailModal._id), dataUrl);
+                        setHistory((prev) => prev.map((h) => h._id === detailModal._id ? { ...h, videoUrl: dataUrl } : h));
+                        showToast("Video subido y guardado ✓", "success");
+                      } catch { showToast("No se pudo guardar el video", "error"); }
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+
+                <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+                  <button onClick={() => detailVideoFileRef.current?.click()}
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(201,105,43,0.12)", border: "1.5px solid var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "0.5rem 0.9rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.8rem", fontWeight: "700", flexShrink: 0, boxShadow: "0 0 8px rgba(201,105,43,0.2)" }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Subir video
+                  </button>
+                  <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", flexShrink: 0 }}>o pega un enlace</span>
+                  <input
+                    value={detailVideoLinkInput}
+                    onChange={(e) => setDetailVideoLinkInput(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key !== "Enter" || !detailVideoLinkInput.trim()) return;
+                      const url = detailVideoLinkInput.trim();
+                      setDetailAttachedVideo(url);
+                      setDetailVideoLinkInput("");
+                      try {
+                        await updateVideoUrlAPI(String(detailModal._id), url);
+                        setHistory((prev) => prev.map((h) => h._id === detailModal._id ? { ...h, videoUrl: url } : h));
+                        showToast("Enlace guardado ✓", "success");
+                      } catch { showToast("No se pudo guardar el enlace", "error"); }
+                    }}
+                    placeholder="YouTube, Google Drive, Dropbox… (Enter para guardar)"
+                    style={{ flex: 1, backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.5rem 0.85rem", color: "var(--text-active)", fontSize: "0.82rem", outline: "none" }}
+                  />
+                </div>
+                <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "0.4rem" }}>
+                  Archivos hasta 50MB · Para videos más grandes usa un enlace externo
+                </p>
+              </div>
             </div>
 
             {/* Footer con acciones */}
@@ -1772,7 +2473,8 @@ function Home() {
           {activeTab === "history"   && renderHistory()}
           {activeTab === "calendar"  && renderCalendar()}
           {activeTab === "social"    && renderSocialMedia()}
-          {activeTab === "video"     && renderVideo()}
+          {activeTab === "video"        && renderVideoStudio()}
+          {activeTab === "imagestudio"  && renderImageStudio()}
           {(activeTab === "campaign" || activeTab === "copy" || activeTab === "hashtag") && (
             <>
               <CampaignForm
