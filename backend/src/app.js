@@ -21,7 +21,10 @@ connectDB();
 
 const app = express();
 
-const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:5173"].filter(Boolean);
+const allowedOrigins = [
+  ...(process.env.FRONTEND_URL || "").split(",").map((url) => url.trim()),
+  "http://localhost:5173",
+].filter(Boolean);
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
