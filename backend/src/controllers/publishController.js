@@ -1,8 +1,12 @@
 const crypto = require("crypto");
 const User = require("../models/User");
+const { encrypt, decrypt } = require("../utils/tokenCrypto");
+const { ensureFreshTikTokToken } = require("./socialAuthController");
 
-const GRAPH_API = "https://graph.facebook.com/v19.0";
-const VALID_PLATFORMS = ["facebook", "instagram", "twitter", "linkedin"];
+const GRAPH_API = "https://graph.facebook.com/v21.0";
+const TIKTOK_API = "https://open.tiktokapis.com/v2";
+const VALID_PLATFORMS = ["facebook", "instagram", "tiktok", "twitter", "linkedin"];
+const OAUTH_MANAGED_PLATFORMS = ["facebook", "instagram", "tiktok"];
 
 /* ── OAuth 1.0a para Twitter ── */
 function buildTwitterOAuthHeader(method, url, apiKey, apiSecret, accessToken, accessTokenSecret) {
@@ -49,12 +53,18 @@ const saveSocialCredentials = async (req, res) => {
     if (!platform || !VALID_PLATFORMS.includes(platform)) {
       return res.status(400).json({ success: false, message: "Plataforma no válida" });
     }
+    if (OAUTH_MANAGED_PLATFORMS.includes(platform)) {
+      return res.status(400).json({
+        success: false,
+        message: `${platform} se conecta con el botón "Conectar con Meta/TikTok", no con tokens manuales.`,
+      });
+    }
     if (!credentials || typeof credentials !== "object") {
       return res.status(400).json({ success: false, message: "Credenciales inválidas" });
     }
 
     await User.findByIdAndUpdate(req.user._id, {
-      $set: { [`socialTokens.${platform}`]: credentials },
+      $set: { [`socialTokens.${platform}`]: encrypt(credentials) },
     });
 
     res.json({ success: true, message: "Cuenta conectada correctamente" });
@@ -70,16 +80,19 @@ const getSocialCredentials = async (req, res) => {
     const result = {};
 
     for (const platform of VALID_PLATFORMS) {
-      const creds = tokens[platform];
+      const creds = decrypt(tokens[platform]);
       let isConnected = false;
       let displayId = "";
 
       if (platform === "twitter") {
         isConnected = !!(creds?.accessToken && creds?.apiKey);
         displayId = creds?.apiKey ? creds.apiKey.slice(0, 8) + "..." : "";
+      } else if (platform === "tiktok") {
+        isConnected = !!creds?.accessToken;
+        displayId = creds?.openId ? creds.openId.slice(0, 8) + "..." : "";
       } else {
-        isConnected = !!(creds?.accessToken);
-        displayId = creds?.pageId || "";
+        isConnected = !!creds?.accessToken;
+        displayId = platform === "instagram" ? creds?.username ? `@${creds.username}` : creds?.pageId : creds?.pageName || creds?.pageId;
       }
 
       if (isConnected) {
@@ -118,7 +131,7 @@ const disconnectSocialCredentials = async (req, res) => {
 
 const publishContent = async (req, res) => {
   try {
-    const { platform, content, imageUrl } = req.body;
+    const { platform, content, imageUrl, videoUrl } = req.body;
 
     if (!platform || !content) {
       return res.status(400).json({ success: false, message: "Faltan datos requeridos" });
@@ -128,7 +141,8 @@ const publishContent = async (req, res) => {
     }
 
     const user = await User.findById(req.user._id).select("+socialTokens");
-    const credentials = user.socialTokens?.[platform];
+    const credentials =
+      platform === "tiktok" ? await ensureFreshTikTokToken(user) : decrypt(user.socialTokens?.[platform]);
 
     if (!credentials?.accessToken) {
       return res.status(400).json({
@@ -227,6 +241,57 @@ const publishContent = async (req, res) => {
         throw new Error(linkedinData.message || "Error de LinkedIn API");
       }
       return res.json({ success: true, postId: linkedinData.id, message: "¡Publicado en LinkedIn exitosamente!" });
+    }
+
+    /* ── TikTok ── */
+    if (platform === "tiktok") {
+      if (!videoUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "TikTok requiere un video. Genera un video para esta campaña primero.",
+        });
+      }
+      const { accessToken } = credentials;
+
+      /* Consulta qué niveles de privacidad puede usar esta cuenta — las apps sin auditar
+         de TikTok solo pueden publicar en privado (SELF_ONLY), no directo al feed público. */
+      const creatorRes = await fetch(`${TIKTOK_API}/post/publish/creator_info/query/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=UTF-8", Authorization: `Bearer ${accessToken}` },
+      });
+      const creatorData = await creatorRes.json();
+      if (!creatorRes.ok || creatorData.error?.code !== "ok") {
+        throw new Error(creatorData.error?.message || "Error al consultar la cuenta de TikTok");
+      }
+
+      const privacyOptions = creatorData.data?.privacy_level_options || [];
+      const isPublicAllowed = privacyOptions.includes("PUBLIC_TO_EVERYONE");
+      const privacyLevel = isPublicAllowed ? "PUBLIC_TO_EVERYONE" : privacyOptions[0] || "SELF_ONLY";
+
+      const initRes = await fetch(`${TIKTOK_API}/post/publish/video/init/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=UTF-8", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          post_info: {
+            title: content.length > 150 ? content.slice(0, 147) + "..." : content,
+            privacy_level: privacyLevel,
+          },
+          source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
+        }),
+      });
+      const initData = await initRes.json();
+      if (!initRes.ok || initData.error?.code !== "ok") {
+        throw new Error(initData.error?.message || "Error al iniciar la publicación en TikTok");
+      }
+
+      return res.json({
+        success: true,
+        postId: initData.data?.publish_id,
+        isDraft: !isPublicAllowed,
+        message: isPublicAllowed
+          ? "¡Video enviado a TikTok! Puede tardar unos minutos en procesarse."
+          : "Video enviado a TikTok, pero quedó como borrador privado (tu app aún no está auditada por TikTok). Abre la app de TikTok para publicarlo manualmente.",
+      });
     }
   } catch (error) {
     res.status(500).json({ success: false, message: `Error al publicar: ${error.message}` });

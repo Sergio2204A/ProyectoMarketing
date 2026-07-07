@@ -6,10 +6,34 @@ const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
 });
 
-export const publishContentAPI = async (platform, content, imageUrl = null) => {
+export const publishContentAPI = async (platform, content, imageUrl = null, videoUrl = null) => {
   const response = await axios.post(
     `${API_URL}/publish`,
-    { platform, content, imageUrl },
+    { platform, content, imageUrl, videoUrl },
+    { headers: authHeader() }
+  );
+  return response.data;
+};
+
+export const getMetaConnectUrlAPI = async () => {
+  const response = await axios.get(`${API_URL}/social/meta/connect`, { headers: authHeader() });
+  return response.data;
+};
+
+export const getTikTokConnectUrlAPI = async () => {
+  const response = await axios.get(`${API_URL}/social/tiktok/connect`, { headers: authHeader() });
+  return response.data;
+};
+
+export const getMetaPendingPagesAPI = async () => {
+  const response = await axios.get(`${API_URL}/social/meta/pending-pages`, { headers: authHeader() });
+  return response.data;
+};
+
+export const selectMetaPageAPI = async (pageId) => {
+  const response = await axios.post(
+    `${API_URL}/social/meta/select-page`,
+    { pageId },
     { headers: authHeader() }
   );
   return response.data;

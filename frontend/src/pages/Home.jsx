@@ -6,7 +6,15 @@ import Header from "../components/Header";
 import CampaignForm from "../components/CampaignForm";
 import ResultCard from "../components/ResultCard";
 import PublishModal from "../components/PublishModal";
-import { getSocialCredentialsAPI, saveSocialCredentialsAPI, disconnectSocialAPI } from "../services/publishService";
+import {
+  getSocialCredentialsAPI,
+  saveSocialCredentialsAPI,
+  disconnectSocialAPI,
+  getMetaConnectUrlAPI,
+  getTikTokConnectUrlAPI,
+  getMetaPendingPagesAPI,
+  selectMetaPageAPI,
+} from "../services/publishService";
 import {
   generateCampaign,
   generateCopy,
@@ -87,13 +95,16 @@ function Home() {
   const [detailVideoLinkInput, setDetailVideoLinkInput] = useState("");
   const detailVideoFileRef = useRef(null);
   const [publishModalOpen, setPublishModalOpen] = useState(null);
-  const [socialCreds, setSocialCreds] = useState({ facebook: { connected: false }, instagram: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } });
+  const [socialCreds, setSocialCreds] = useState({ facebook: { connected: false }, instagram: { connected: false }, tiktok: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } });
   const [socialLoadingCreds, setSocialLoadingCreds] = useState(false);
   const [socialOpenForm, setSocialOpenForm] = useState(null);
   const [socialForm, setSocialForm] = useState({});
   const [socialSaving, setSocialSaving] = useState(false);
+  const [socialConnecting, setSocialConnecting] = useState(null);
   const [socialDisconnecting, setSocialDisconnecting] = useState(null);
   const [socialShowInstructions, setSocialShowInstructions] = useState(null);
+  const [metaPendingPages, setMetaPendingPages] = useState(null);
+  const [metaSelectingPage, setMetaSelectingPage] = useState(false);
   const [calAiForm, setCalAiForm] = useState({ product: "", platform: "Instagram", goal: "" });
   const [calAiLoading, setCalAiLoading] = useState(false);
 
@@ -110,6 +121,9 @@ function Home() {
   const [videoStudioFilePreview, setVideoStudioFilePreview] = useState(null);
   const videoStudioFileRef = useRef(null);
   const videoStudioBottomRef = useRef(null);
+  const videoAttachFileRef = useRef(null);
+  const [videoAttachTargetId, setVideoAttachTargetId] = useState(null);
+  const [videoAttachLinkInputs, setVideoAttachLinkInputs] = useState({});
 
   const [studioMessages, setStudioMessages] = useState([]);
   const [studioPrompt, setStudioPrompt] = useState("");
@@ -143,6 +157,30 @@ function Home() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
   useEffect(() => { if (activeTab === "social") loadSocialCreds(); }, [activeTab]);
+
+  /* ── Retorno del OAuth de Meta/TikTok (el backend redirige aquí con ?social=...) ── */
+  useEffect(() => {
+    const social = new URLSearchParams(window.location.search).get("social");
+    if (!social) return;
+    window.history.replaceState({}, "", window.location.pathname);
+
+    const MESSAGES = {
+      meta_connected: ["Facebook e Instagram conectados ✓", "success"],
+      meta_select_page: ["Elige qué página de Facebook usar para conectar", "info"],
+      meta_no_pages: ["Tu cuenta de Facebook no administra ninguna Página. Crea una Página primero.", "error"],
+      meta_error: ["No se pudo conectar con Meta. Intenta de nuevo.", "error"],
+      tiktok_connected: ["TikTok conectado ✓", "success"],
+      tiktok_error: ["No se pudo conectar con TikTok. Intenta de nuevo.", "error"],
+    };
+    const [message, type] = MESSAGES[social] || ["Listo", "info"];
+    showToast(message, type);
+
+    if (social === "meta_select_page") {
+      getMetaPendingPagesAPI().then((data) => setMetaPendingPages(data.pages)).catch(() => {});
+    } else {
+      loadSocialCreds();
+    }
+  }, []);
   useEffect(() => {
     const prevTab = prevTabRef.current;
     prevTabRef.current = activeTab;
@@ -823,6 +861,51 @@ function Home() {
     a.click();
   };
 
+  /* ── Adjuntar video a un script del Video Studio, disponible desde que se genera (no solo ya guardado en historial) ── */
+  const attachVideoToStudioMessage = async (msgId, url) => {
+    setVideoStudioMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, videoUrl: url } : m)));
+    const target = videoStudioMessages.find((m) => m.id === msgId);
+    if (target?.generationId) {
+      try {
+        await updateVideoUrlAPI(target.generationId, url);
+      } catch {
+        showToast("El video se adjuntó aquí, pero no se pudo guardar en el historial", "error");
+      }
+    }
+  };
+
+  const handleVideoAttachFileChange = async (msgId, file) => {
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      showToast("El video supera 50MB. Usa un enlace de YouTube, Drive o Dropbox.", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      await attachVideoToStudioMessage(msgId, ev.target.result);
+      showToast("Video adjuntado ✓", "success");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveVideoStudioScript = async (msg) => {
+    try {
+      const data = await saveGenerationAPI(
+        "video",
+        { product: videoStudioContext.product, format: videoStudioContext.format, duration: videoStudioContext.duration, goal: videoStudioContext.goal, audience: videoStudioContext.audience },
+        msg.script
+      );
+      const newId = String(data.generation._id);
+      setVideoStudioMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, generationId: newId } : m)));
+      if (msg.videoUrl) {
+        await updateVideoUrlAPI(newId, msg.videoUrl);
+      }
+      showToast("Script guardado en el historial ✓", "success");
+    } catch {
+      showToast("No se pudo guardar", "error");
+    }
+  };
+
   const renderVideoStudio = () => (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)", gap: 0 }}>
       {/* Header con contexto */}
@@ -855,6 +938,16 @@ function Home() {
           </div>
         </div>
       </div>
+
+      {/* Input oculto compartido para adjuntar video a cualquier script de la conversación */}
+      <input type="file" accept="video/*" ref={videoAttachFileRef} style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files[0];
+          const targetId = videoAttachTargetId;
+          e.target.value = "";
+          if (targetId != null) handleVideoAttachFileChange(targetId, file);
+        }}
+      />
 
       {/* Área de conversación */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "1.5rem", padding: "0.5rem 0.25rem" }}>
@@ -993,15 +1086,16 @@ function Home() {
                           style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
                           📋 Copiar todo
                         </button>
-                        <button onClick={async () => {
-                          try {
-                            await saveGenerationAPI("video", { product: videoStudioContext.product, format: videoStudioContext.format, duration: videoStudioContext.duration, goal: videoStudioContext.goal, audience: videoStudioContext.audience }, msg.script);
-                            showToast("Script guardado en el historial ✓", "success");
-                          } catch { showToast("No se pudo guardar", "error"); }
-                        }}
-                          style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "700" }}>
-                          💾 Guardar en historial
-                        </button>
+                        {msg.generationId ? (
+                          <span style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.35rem 0.8rem", color: "#34d399", fontSize: "0.75rem", fontWeight: "700" }}>
+                            ✓ Guardado en historial
+                          </span>
+                        ) : (
+                          <button onClick={() => handleSaveVideoStudioScript(msg)}
+                            style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "700" }}>
+                            💾 Guardar en historial
+                          </button>
+                        )}
                         <button onClick={() => setVideoStudioInput("Refina este script y hazlo más impactante")}
                           style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
                           ✨ Refinar
@@ -1010,6 +1104,65 @@ function Home() {
                           style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.35rem 0.8rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.75rem" }}>
                           🔄 Variar
                         </button>
+                      </div>
+
+                      {/* Adjuntar video a este script — disponible apenas se genera, sin esperar a guardarlo en historial */}
+                      <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "0.85rem 1rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
+                          <p style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
+                            🎞️ Video de esta campaña
+                          </p>
+                          {msg.videoUrl && (
+                            <button onClick={() => attachVideoToStudioMessage(msg.id, null)}
+                              style={{ background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.2rem 0.6rem", color: "#f87171", cursor: "pointer", fontSize: "0.7rem" }}>
+                              Quitar video
+                            </button>
+                          )}
+                        </div>
+
+                        {msg.videoUrl && (
+                          <div style={{ marginBottom: "0.75rem" }}>
+                            {msg.videoUrl.includes("youtube.com") || msg.videoUrl.includes("youtu.be") ? (
+                              <iframe
+                                src={`https://www.youtube.com/embed/${msg.videoUrl.split("v=")[1]?.split("&")[0] || msg.videoUrl.split("/").pop()}`}
+                                style={{ width: "100%", height: "240px", borderRadius: "var(--border-radius-md)", border: "none" }}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            ) : msg.videoUrl.startsWith("data:video") || /\.(mp4|webm|mov|ogg)$/i.test(msg.videoUrl) ? (
+                              <video controls style={{ width: "100%", borderRadius: "var(--border-radius-md)", maxHeight: "260px", background: "#000" }}>
+                                <source src={msg.videoUrl} />
+                              </video>
+                            ) : (
+                              <a href={msg.videoUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.85rem", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--accent-secondary)", fontSize: "0.8rem", textDecoration: "none", fontWeight: "600" }}>
+                                Ver video adjunto →
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                          <button onClick={() => { setVideoAttachTargetId(msg.id); videoAttachFileRef.current?.click(); }}
+                            style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "rgba(201,105,43,0.12)", border: "1.5px solid var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.75rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "700", flexShrink: 0 }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Subir video
+                          </button>
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", flexShrink: 0 }}>o pega un enlace</span>
+                          <input
+                            value={videoAttachLinkInputs[msg.id] || ""}
+                            onChange={(e) => setVideoAttachLinkInputs((prev) => ({ ...prev, [msg.id]: e.target.value }))}
+                            onKeyDown={async (e) => {
+                              if (e.key !== "Enter" || !videoAttachLinkInputs[msg.id]?.trim()) return;
+                              const url = videoAttachLinkInputs[msg.id].trim();
+                              setVideoAttachLinkInputs((prev) => ({ ...prev, [msg.id]: "" }));
+                              await attachVideoToStudioMessage(msg.id, url);
+                              showToast("Enlace guardado ✓", "success");
+                            }}
+                            placeholder="YouTube, Drive, Dropbox… (Enter para guardar)"
+                            style={{ flex: 1, minWidth: "180px", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.7rem", color: "var(--text-active)", fontSize: "0.78rem", outline: "none" }}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1246,8 +1399,8 @@ function Home() {
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "0.6rem 0.75rem" }}>
           <input type="file" accept="image/*" ref={studioFileRef} style={{ display: "none" }} onChange={(e) => handleStudioFileChange(e.target.files[0])} />
           <button onClick={() => studioFileRef.current?.click()} title="Adjuntar imagen o logo"
-            style={{ background: "none", border: "none", color: studioFile ? "var(--accent-secondary)" : "var(--text-muted)", cursor: "pointer", padding: "0.35rem", borderRadius: "6px", flexShrink: 0, display: "flex", alignItems: "center" }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            style={{ background: studioFile ? "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" : "rgba(201,105,43,0.15)", border: "1.5px solid var(--accent-secondary)", color: studioFile ? "#fff" : "var(--accent-secondary)", cursor: "pointer", padding: "0.42rem", borderRadius: "8px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", boxShadow: "0 0 8px rgba(201,105,43,0.25)" }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           </button>
           <textarea
             value={studioPrompt}
@@ -2271,6 +2424,42 @@ function Home() {
     finally { setSocialDisconnecting(null); }
   };
 
+  const handleMetaConnect = async () => {
+    setSocialConnecting("meta");
+    try {
+      const { url } = await getMetaConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      showToast("No se pudo iniciar la conexión con Meta", "error");
+      setSocialConnecting(null);
+    }
+  };
+
+  const handleTikTokConnect = async () => {
+    setSocialConnecting("tiktok");
+    try {
+      const { url } = await getTikTokConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      showToast("No se pudo iniciar la conexión con TikTok", "error");
+      setSocialConnecting(null);
+    }
+  };
+
+  const handleSelectMetaPage = async (pageId) => {
+    setMetaSelectingPage(true);
+    try {
+      await selectMetaPageAPI(pageId);
+      setMetaPendingPages(null);
+      await loadSocialCreds();
+      showToast("Página conectada ✓", "success");
+    } catch {
+      showToast("Error al seleccionar la página", "error");
+    } finally {
+      setMetaSelectingPage(false);
+    }
+  };
+
   const FB_LOGO = (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
@@ -2300,23 +2489,17 @@ function Home() {
 
   const SOCIAL_PLATFORMS = [
     { id: "facebook", label: "Facebook", logo: FB_LOGO,
-      badge: null,
-      fields: [
-        { key: "pageId", label: "Page ID", placeholder: "Ej: 123456789012345", type: "text" },
-        { key: "accessToken", label: "Access Token", placeholder: "EAAxxxxxxx...", type: "text" },
-      ],
-      instructions: ["Ve a developers.facebook.com y crea una app (tipo: Business)", "En tu app añade el producto 'Pages API'", "Desde Graph API Explorer selecciona tu app y tu Página", "Genera un token con permisos: pages_manage_posts, pages_read_engagement", "Copia el Page ID desde la configuración de tu Página de Facebook"] },
-    { id: "instagram", label: "Instagram", logo: IG_LOGO,
-      badge: null,
-      fields: [
-        { key: "pageId", label: "Page ID (Instagram Business)", placeholder: "Ej: 123456789012345", type: "text" },
-        { key: "accessToken", label: "Access Token", placeholder: "EAAxxxxxxx...", type: "text" },
-      ],
-      instructions: ["Tu cuenta debe ser Business o Creator y estar conectada a una Página de Facebook", "Ve a developers.facebook.com → Graph API Explorer", "Genera un token con: instagram_basic, instagram_content_publish, pages_read_engagement", "El 'Page ID' es el ID numérico de tu cuenta Instagram Business (no el @usuario)", "Para publicar en Instagram también necesitas tener una imagen generada"] },
-    { id: "tiktok", label: "TikTok", logo: TT_LOGO,
-      badge: "Próximamente",
+      badge: null, oauth: "meta",
       fields: [],
-      instructions: ["Crea una cuenta de desarrollador en developers.tiktok.com", "Crea una app y solicita acceso al 'Content Posting API'", "El proceso de aprobación puede tardar varios días hábiles", "Una vez aprobado, genera tu Access Token desde el portal de TikTok for Business", "Copia tu Open ID (identificador único de tu cuenta TikTok)"] },
+      note: "Se conecta junto con Instagram con un solo clic — misma cuenta de Meta." },
+    { id: "instagram", label: "Instagram", logo: IG_LOGO,
+      badge: null, oauth: "meta",
+      fields: [],
+      note: "Tu cuenta debe ser Business o Creator y estar enlazada a la Página de Facebook que elijas al conectar." },
+    { id: "tiktok", label: "TikTok", logo: TT_LOGO,
+      badge: null, oauth: "tiktok",
+      fields: [],
+      note: "Mientras la app no esté auditada por TikTok, los videos publicados quedan como borrador privado — hay que abrir la app de TikTok y darle Publicar a mano." },
     { id: "twitter", label: "Twitter / X", logo: TW_LOGO,
       badge: null,
       fields: [
@@ -2342,6 +2525,22 @@ function Home() {
         <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginTop: "0.3rem" }}>Conecta tus cuentas para publicar el contenido generado directamente desde la app.</p>
       </div>
 
+      {metaPendingPages && (
+        <div className="section-card" style={{ border: "1px solid rgba(201,105,43,0.35)" }}>
+          <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.9rem", marginBottom: "0.3rem" }}>Elige qué Página de Facebook conectar</p>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginBottom: "1rem" }}>Tu cuenta administra varias Páginas. La que elijas se usará para publicar en Facebook y, si tiene una cuenta de Instagram enlazada, también en Instagram.</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {metaPendingPages.map((p) => (
+              <button key={p.id} onClick={() => handleSelectMetaPage(p.id)} disabled={metaSelectingPage}
+                style={{ textAlign: "left", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.7rem 0.9rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.85rem" }}>
+                <strong style={{ color: "var(--text-active)" }}>{p.name}</strong>
+                {p.hasInstagram && <span style={{ color: "var(--accent-secondary)", marginLeft: "0.5rem" }}>· Instagram: @{p.instagramUsername}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {socialLoadingCreds ? (
         <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>Cargando...</div>
       ) : (
@@ -2350,6 +2549,7 @@ function Home() {
             const cred = socialCreds[platform.id];
             const isOpen = socialOpenForm === platform.id;
             const showInstr = socialShowInstructions === platform.id;
+            const isConnecting = socialConnecting === platform.oauth;
             return (
               <div key={platform.id} className="section-card" style={{ border: `1px solid ${cred?.connected ? "rgba(201,105,43,0.3)" : "var(--border-color)"}` }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
@@ -2360,9 +2560,6 @@ function Home() {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.95rem", margin: 0 }}>{platform.label}</p>
-                        {platform.badge && (
-                          <span style={{ fontSize: "0.65rem", fontWeight: "700", background: "rgba(250,204,21,0.15)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)", borderRadius: "4px", padding: "0.1rem 0.45rem", letterSpacing: "0.04em" }}>{platform.badge}</span>
-                        )}
                       </div>
                       {cred?.connected ? (
                         <p style={{ color: "var(--accent-secondary)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Conectado · {platform.id === "twitter" ? "API Key" : "ID"}: {cred.pageId}</p>
@@ -2371,20 +2568,22 @@ function Home() {
                       )}
                     </div>
                   </div>
-                  {platform.badge ? (
-                    <button
-                      onClick={() => setSocialShowInstructions(showInstr ? null : platform.id)}
-                      style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}
-                    >
-                      {showInstr ? "Ocultar" : "Ver requisitos"}
-                    </button>
-                  ) : cred?.connected ? (
+                  {cred?.connected ? (
                     <button
                       onClick={() => handleSocialDisconnect(platform.id)}
                       disabled={socialDisconnecting === platform.id}
                       style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}
                     >
                       {socialDisconnecting === platform.id ? "..." : "Desconectar"}
+                    </button>
+                  ) : platform.oauth ? (
+                    <button
+                      onClick={platform.oauth === "meta" ? handleMetaConnect : handleTikTokConnect}
+                      disabled={isConnecting}
+                      className="btn-primary"
+                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
+                    >
+                      {isConnecting ? "Redirigiendo..." : `Conectar con ${platform.oauth === "meta" ? "Meta" : "TikTok"}`}
                     </button>
                   ) : (
                     <button
@@ -2397,18 +2596,13 @@ function Home() {
                   )}
                 </div>
 
-                {platform.badge && showInstr && (
-                  <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border-color)" }}>
-                    <p style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.6rem" }}>Qué necesitas para conectar {platform.label}</p>
-                    <ol style={{ margin: 0, paddingLeft: "1.2rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                      {platform.instructions.map((step, i) => (
-                        <li key={i} style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>{step}</li>
-                      ))}
-                    </ol>
-                  </div>
+                {platform.oauth && (
+                  <p style={{ marginTop: "0.85rem", paddingTop: "0.85rem", borderTop: "1px solid var(--border-color)", color: "var(--text-muted)", fontSize: "0.78rem", lineHeight: "1.5" }}>
+                    {platform.note}
+                  </p>
                 )}
 
-                {!platform.badge && !cred?.connected && isOpen && (
+                {!platform.oauth && !cred?.connected && isOpen && (
                   <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: "1rem" }}>
                     <button
                       onClick={() => setSocialShowInstructions(showInstr ? null : platform.id)}
@@ -2455,7 +2649,7 @@ function Home() {
       <div className="section-card" style={{ background: "var(--accent-subtle)", border: "1px solid rgba(201,105,43,0.15)" }}>
         <p style={{ color: "var(--accent-secondary)", fontWeight: "700", fontSize: "0.85rem", marginBottom: "0.4rem" }}>¿Cómo funciona la publicación?</p>
         <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.6", margin: 0 }}>
-          Una vez conectada la cuenta, genera tu campaña, copy o hashtags y haz clic en el botón <strong style={{ color: "var(--text-soft)" }}>Publicar</strong> que aparece en el resultado. Se abrirá un modal donde seleccionas la plataforma y publicas con un clic. Instagram requiere que también hayas generado una imagen.
+          Una vez conectada la cuenta, genera tu campaña, copy o hashtags y haz clic en el botón <strong style={{ color: "var(--text-soft)" }}>Publicar</strong> que aparece en el resultado. Se abrirá un modal donde seleccionas la plataforma y publicas con un clic. Instagram requiere que también hayas generado una imagen; TikTok requiere que hayas generado un video.
         </p>
       </div>
     </div>
@@ -2671,6 +2865,7 @@ function Home() {
         onClose={() => { setPublishModalOpen(null); setHistorySearch(""); loadHistory(); }}
         content={publishModalOpen?.content}
         imageUrl={publishModalOpen?.imageUrl}
+        videoUrl={publishModalOpen?.videoUrl}
       />
     </div>
   );

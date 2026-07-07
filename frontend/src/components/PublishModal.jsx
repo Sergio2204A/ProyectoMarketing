@@ -4,6 +4,8 @@ import {
   getSocialCredentialsAPI,
   saveSocialCredentialsAPI,
   disconnectSocialAPI,
+  getMetaConnectUrlAPI,
+  getTikTokConnectUrlAPI,
 } from "../services/publishService";
 
 const PLATFORMS = [
@@ -19,17 +21,9 @@ const PLATFORMS = [
       </svg>
     ),
     requiresImage: false,
-    fields: [
-      { key: "pageId", label: "Page ID", placeholder: "Ej: 123456789012345", type: "text" },
-      { key: "accessToken", label: "Access Token", placeholder: "EAAxxxxxxx...", type: "text" },
-    ],
-    instructions: [
-      "Ve a developers.facebook.com y crea una app (tipo: Business)",
-      "En tu app, añade el producto 'Pages API'",
-      "Desde Graph API Explorer, selecciona tu app y tu Página",
-      "Genera un token con permisos: pages_manage_posts, pages_read_engagement",
-      "Copia el Page ID (está en la configuración de tu Página de Facebook)",
-    ],
+    oauth: "meta",
+    fields: [],
+    note: "Se conecta junto con Instagram con un solo clic (misma cuenta de Meta).",
   },
   {
     id: "instagram",
@@ -43,17 +37,25 @@ const PLATFORMS = [
       </svg>
     ),
     requiresImage: true,
-    fields: [
-      { key: "pageId", label: "Page ID (Instagram Business)", placeholder: "Ej: 123456789012345", type: "text" },
-      { key: "accessToken", label: "Access Token", placeholder: "EAAxxxxxxx...", type: "text" },
-    ],
-    instructions: [
-      "Tu cuenta de Instagram debe ser de tipo Business o Creator",
-      "Conéctala a una Página de Facebook",
-      "Ve a developers.facebook.com → Graph API Explorer",
-      "Genera un token con: instagram_basic, instagram_content_publish, pages_read_engagement",
-      "El 'Page ID' es el ID de tu cuenta de Instagram Business (no el @username)",
-    ],
+    oauth: "meta",
+    fields: [],
+    note: "Requiere que tu cuenta de Instagram sea Business/Creator y esté enlazada a la Página de Facebook elegida al conectar.",
+  },
+  {
+    id: "tiktok",
+    label: "TikTok",
+    color: "#25F4EE",
+    bg: "rgba(37,244,238,0.1)",
+    border: "rgba(37,244,238,0.35)",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#25F4EE" }}>
+        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z" />
+      </svg>
+    ),
+    requiresVideo: true,
+    oauth: "tiktok",
+    fields: [],
+    note: "Mientras la app no esté auditada por TikTok, el video queda como borrador privado — hay que abrir la app y publicarlo a mano.",
   },
   {
     id: "twitter",
@@ -107,9 +109,9 @@ const PLATFORMS = [
   },
 ];
 
-const EMPTY_CREDS = { facebook: { connected: false }, instagram: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } };
+const EMPTY_CREDS = { facebook: { connected: false }, instagram: { connected: false }, tiktok: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } };
 
-function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
+function PublishModal({ isOpen, onClose, content, imageUrl, videoUrl, activeTab }) {
   const [selectedPlatform, setSelectedPlatform] = useState("facebook");
   const [credentials, setCredentials] = useState(EMPTY_CREDS);
   const [loadingCreds, setLoadingCreds] = useState(true);
@@ -117,6 +119,7 @@ function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
   const [showConnectForm, setShowConnectForm] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [connectingOAuth, setConnectingOAuth] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -183,13 +186,23 @@ function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
     }
   };
 
+  const handleOAuthConnect = async () => {
+    setConnectingOAuth(true);
+    try {
+      const { url } = platform.oauth === "meta" ? await getMetaConnectUrlAPI() : await getTikTokConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      setConnectingOAuth(false);
+    }
+  };
+
   const handlePublish = async () => {
     setPublishing(true);
     setPublishResult(null);
     try {
       const text = Array.isArray(content) ? content.join(" ") : content;
-      const data = await publishContentAPI(selectedPlatform, text, imageUrl);
-      setPublishResult({ ok: true, message: data.message, postId: data.postId });
+      const data = await publishContentAPI(selectedPlatform, text, imageUrl, videoUrl);
+      setPublishResult({ ok: true, message: data.message, postId: data.postId, isDraft: data.isDraft });
     } catch (err) {
       const msg = err.response?.data?.message || "Error inesperado al publicar";
       setPublishResult({ ok: false, message: msg });
@@ -199,6 +212,7 @@ function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
   };
 
   const needsImageButMissing = platform?.requiresImage && !imageUrl;
+  const needsVideoButMissing = platform?.requiresVideo && !videoUrl;
   const allFormFilled = platform?.fields.every((f) => (connectForm[f.key] || "").trim());
 
   if (!isOpen) return null;
@@ -275,18 +289,33 @@ function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
                   >
                     {disconnecting ? "..." : "Desconectar"}
                   </button>
-                ) : (
+                ) : !platform.oauth ? (
                   <button
                     onClick={() => { setShowConnectForm((v) => !v); setConnectForm({}); }}
                     style={{ background: platform.bg, border: `1px solid ${platform.border}`, color: platform.color, borderRadius: "var(--border-radius-sm)", padding: "0.3rem 0.75rem", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}
                   >
                     {showConnectForm ? "Cancelar" : "Conectar"}
                   </button>
-                )}
+                ) : null}
               </div>
 
-              {/* Formulario de conexión — campos dinámicos por plataforma */}
-              {!cred.connected && showConnectForm && (
+              {/* Conexión OAuth (Meta / TikTok) — un solo clic, sin tokens manuales */}
+              {!cred.connected && platform.oauth && (
+                <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5", margin: 0 }}>{platform.note}</p>
+                  <button
+                    className="btn-primary"
+                    onClick={handleOAuthConnect}
+                    disabled={connectingOAuth}
+                    style={{ height: "42px", fontSize: "0.88rem" }}
+                  >
+                    {connectingOAuth ? "Redirigiendo..." : `Conectar con ${platform.oauth === "meta" ? "Meta" : "TikTok"}`}
+                  </button>
+                </div>
+              )}
+
+              {/* Formulario de conexión manual — Twitter/LinkedIn (sin app OAuth configurada aún) */}
+              {!cred.connected && !platform.oauth && showConnectForm && (
                 <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.85rem", margin: 0 }}>
@@ -358,15 +387,25 @@ function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
                     </div>
                   )}
 
+                  {/* Aviso TikTok sin video */}
+                  {needsVideoButMissing && (
+                    <div style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: "var(--border-radius-md)", padding: "0.85rem 1rem", display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+                      <span style={{ fontSize: "1rem", flexShrink: 0 }}>⚠️</span>
+                      <p style={{ color: "#fbbf24", fontSize: "0.78rem", lineHeight: "1.5", margin: 0 }}>
+                        TikTok requiere un video para publicar. Genera o adjunta un video para esta campaña y luego vuelve aquí.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Resultado de publicación */}
                   {publishResult && (
                     <div style={{
-                      background: publishResult.ok ? "rgba(52,211,153,0.08)" : "rgba(248,113,113,0.08)",
-                      border: `1px solid ${publishResult.ok ? "rgba(52,211,153,0.3)" : "rgba(248,113,113,0.3)"}`,
+                      background: publishResult.ok ? (publishResult.isDraft ? "rgba(251,191,36,0.08)" : "rgba(52,211,153,0.08)") : "rgba(248,113,113,0.08)",
+                      border: `1px solid ${publishResult.ok ? (publishResult.isDraft ? "rgba(251,191,36,0.3)" : "rgba(52,211,153,0.3)") : "rgba(248,113,113,0.3)"}`,
                       borderRadius: "var(--border-radius-md)", padding: "0.9rem 1.1rem",
                     }}>
-                      <p style={{ color: publishResult.ok ? "#34d399" : "#f87171", fontWeight: "700", fontSize: "0.85rem", margin: 0 }}>
-                        {publishResult.ok ? "✅ " : "❌ "}{publishResult.message}
+                      <p style={{ color: publishResult.ok ? (publishResult.isDraft ? "#fbbf24" : "#34d399") : "#f87171", fontWeight: "700", fontSize: "0.85rem", margin: 0 }}>
+                        {publishResult.ok ? (publishResult.isDraft ? "⚠️ " : "✅ ") : "❌ "}{publishResult.message}
                       </p>
                       {publishResult.ok && publishResult.postId && (
                         <p style={{ color: "var(--text-muted)", fontSize: "0.72rem", marginTop: "0.25rem", marginBottom: 0 }}>
@@ -381,7 +420,7 @@ function PublishModal({ isOpen, onClose, content, imageUrl, activeTab }) {
                     <button
                       className="btn-primary"
                       onClick={handlePublish}
-                      disabled={publishing || needsImageButMissing}
+                      disabled={publishing || needsImageButMissing || needsVideoButMissing}
                       style={{ height: "46px", fontSize: "0.92rem", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
                     >
                       {publishing ? (

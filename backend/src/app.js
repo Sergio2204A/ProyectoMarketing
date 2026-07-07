@@ -13,6 +13,7 @@ const refineRoutes = require("./routes/refineRoutes");
 const publishRoutes = require("./routes/publishRoutes");
 const videoRoutes = require("./routes/videoRoutes");
 const imageRoutes = require("./routes/imageRoutes");
+const socialAuthRoutes = require("./routes/socialAuthRoutes");
 
 const connectDB = require("./db");
 
@@ -20,10 +21,12 @@ connectDB();
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:5173"].filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.get("/", (req, res) => res.json({ message: "Backend funcionando" }));
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use("/auth", authRoutes);
 app.use("/campaign", campaignRoutes);
@@ -36,6 +39,12 @@ app.use("/refine", refineRoutes);
 app.use("/publish", publishRoutes);
 app.use("/video", videoRoutes);
 app.use("/image", imageRoutes);
+app.use("/social", socialAuthRoutes);
+
+app.use((err, req, res, next) => {
+  console.error("Error no controlado:", err);
+  res.status(500).json({ success: false, message: "Error interno del servidor" });
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
