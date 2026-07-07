@@ -241,28 +241,54 @@ http://localhost:5173
 
 ## 🚀 Despliegue en producción (para que el equipo lo use, no solo localhost)
 
-Recomendado por simplicidad y costo: **Railway** para el backend, **Mongo Atlas** (ya en uso) para la base de datos, y **Vercel** para el frontend. El repo ya está listo para esto (`npm start` en el backend, `npm run build` en el frontend) — solo falta hacer los siguientes clics:
+Recomendado por costo real (gratis, sin tarjeta): **Render** para el backend, **Mongo Atlas** (ya en uso) para la base de datos, y **Vercel** para el frontend. El repo ya está listo para esto (`npm start` en el backend, `npm run build` en el frontend) — solo falta hacer los siguientes clics.
 
-### 1. Backend en Railway
-1. Entra a [railway.app](https://railway.app) y crea una cuenta con GitHub.
-2. **New Project → Deploy from GitHub repo** → elige `ProyectoMarketing`.
-3. En **Settings** del servicio, pon **Root Directory** = `backend`.
-4. En **Variables**, pega todas las variables de tu `backend/.env` (con los valores reales, no los placeholders).
-5. Railway hace el deploy solo y te da una URL pública, algo como `https://tuapp.up.railway.app`.
+> Nota: el plan gratis de Render "duerme" el backend tras 15 min sin uso — la primera petición después de eso tarda ~30-50 segundos en responder mientras despierta. Para uso interno de un equipo chico es aceptable; si más adelante molesta, se puede pasar al plan pago de Render sin cambiar nada de código.
+
+### 1. Backend en Render
+1. Entra a [render.com](https://render.com) → "Get Started" → entra con tu cuenta de GitHub.
+2. **New +** → **"Web Service"** → conecta el repo `ProyectoMarketing`.
+3. En la configuración del servicio:
+   - **Root Directory**: `backend`
+   - **Runtime**: Node
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Instance Type**: **Free**
+4. Antes de crear el servicio, en la sección **Environment Variables**, agrega todas las de tu `backend/.env` (los valores reales, no los placeholders):
+   ```
+   PORT
+   GROQ_API_KEY
+   MONGO_URI
+   JWT_SECRET
+   RUNWAY_API_KEY
+   OPENAI_API_KEY
+   EMAIL_USER
+   EMAIL_APP_PASSWORD
+   FRONTEND_URL
+   META_APP_ID
+   META_APP_SECRET
+   META_REDIRECT_URI
+   TIKTOK_CLIENT_KEY
+   TIKTOK_CLIENT_SECRET
+   TIKTOK_REDIRECT_URI
+   SOCIAL_TOKEN_ENCRYPTION_KEY
+   ```
+   Para `FRONTEND_URL`, `META_REDIRECT_URI` y `TIKTOK_REDIRECT_URI` deja el mismo valor de local por ahora — se corrigen en el paso 3.
+5. Clic en **"Create Web Service"**. Render te da una URL pública tipo `https://proyectomarketing.onrender.com`. **Guarda esa URL.**
 
 ### 2. Frontend en Vercel
 1. Entra a [vercel.com](https://vercel.com) y crea una cuenta con GitHub.
 2. **Add New Project** → mismo repo `ProyectoMarketing`.
 3. En la configuración del proyecto, **Root Directory** = `frontend` (Vercel detecta que es Vite automáticamente).
-4. Agrega una sola variable de entorno: `VITE_API_URL` = la URL de Railway del paso anterior (sin `/` al final).
+4. Agrega una sola variable de entorno: `VITE_API_URL` = la URL de Render del paso anterior (sin `/` al final).
 5. Dale **Deploy** — Vercel te da su propia URL pública, algo como `https://tuapp.vercel.app`.
 
 ### 3. Cerrar el círculo
-1. Vuelve a Railway → Variables → actualiza `FRONTEND_URL` con la URL real de Vercel del paso 2.
-2. Actualiza también `META_REDIRECT_URI` y `TIKTOK_REDIRECT_URI` cambiando `localhost:3001` por tu dominio de Railway (ej. `https://tuapp.up.railway.app/social/meta/callback`).
-3. Registra esas mismas URLs (las de Railway) como "Valid OAuth Redirect URI" en los dashboards de Meta y TikTok, reemplazando las de `localhost` que usabas en desarrollo.
+1. Vuelve a Render → Environment → actualiza `FRONTEND_URL` con la URL real de Vercel del paso 2.
+2. Actualiza también `META_REDIRECT_URI` y `TIKTOK_REDIRECT_URI` cambiando `localhost:3001` por tu dominio de Render (ej. `https://proyectomarketing.onrender.com/social/meta/callback`).
+3. Registra esas mismas URLs (las de Render) como "Valid OAuth Redirect URI" en los dashboards de Meta y TikTok, reemplazando las de `localhost` que usabas en desarrollo.
 
-Con esto, cualquiera del equipo entra a la URL de Vercel, se registra y ya puede usar la herramienta — sin depender de tu laptop.
+Con esto, cualquiera del equipo entra a la URL de Vercel, se registra y ya puede usar la herramienta — sin depender de tu laptop ni pagar hosting.
 
 ---
 
