@@ -65,7 +65,7 @@ const generateRealVideo = async (req, res) => {
     const data = await runwayRes.json();
     if (!runwayRes.ok) {
       console.error("Runway error completo:", JSON.stringify(data));
-      throw new Error(JSON.stringify(data.errors || data.error || data.message || data));
+      throw new Error(JSON.stringify(data));
     }
 
     res.json({ success: true, taskId: data.id, startImage });
