@@ -677,6 +677,7 @@ function Home() {
                   <div key={item._id} className="activity-item">
                     <span className={badgeClass(item.type)}>{TYPE_LABELS[item.type] || item.type}</span>
                     <span className="activity-product">{item.input?.product || "—"}</span>
+                    {item.creatorName && <span className="activity-time" style={{ color: "var(--accent-secondary)" }}>{item.creatorName}</span>}
                     <span className="activity-time">{timeAgo(item.createdAt)}</span>
                   </div>
                 ))}
@@ -1876,17 +1877,17 @@ function Home() {
                   )}
                   <button
                     onClick={() => {
-                      const text = Array.isArray(item.output) ? item.output.join("\n") : typeof item.output === "object" ? JSON.stringify(item.output, null, 2) : item.output;
-                      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url; a.download = `${item.type}-${item.input?.product || "resultado"}-${Date.now()}.txt`; a.click();
-                      URL.revokeObjectURL(url);
+                      const product = item.input?.product || TYPE_LABELS[item.type] || "resultado";
+                      if (item.type === "video" && item.output?.hook) {
+                        exportVideoScriptToPDF({ product, script: item.output });
+                      } else {
+                        exportResultToPDF({ type: item.type, product, content: item.output });
+                      }
                     }}
-                    title="Descargar como .txt"
+                    title="Descargar como PDF"
                     className="btn-action-download">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    .txt
+                    PDF
                   </button>
                   <button onClick={() => toggleFavorite(item._id)} title={item.isFavorite ? "Quitar de favoritos" : "Guardar en favoritos"} className={item.isFavorite ? "btn-action-fav active" : "btn-action-fav"}>
                     {item.isFavorite ? "★" : "☆"} Fav
@@ -1898,6 +1899,11 @@ function Home() {
                     {TYPE_LABELS[item.type] || item.type}
                   </span>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{new Date(item.createdAt).toLocaleString()}</span>
+                  {item.creatorName && (
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent-secondary)", fontWeight: "700", background: "var(--accent-subtle)", padding: "0.15rem 0.55rem", borderRadius: "999px" }}>
+                      {item.creatorName}
+                    </span>
+                  )}
                 </div>
                 <h4 style={{ color: "var(--text-active)", fontSize: "1rem", marginBottom: "0.1rem", fontWeight: "700", letterSpacing: "-0.02em", borderLeft: "3px solid var(--accent-primary)", paddingLeft: "0.6rem" }}>
                   {item.input?.product || "Sin nombre"}

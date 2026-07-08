@@ -1,12 +1,22 @@
 const Generation = require("../models/Generation");
 
+/* Historial compartido: todo el equipo ve y puede editar las creaciones de todos,
+   no solo las propias. Se muestra quién creó cada una uniendo el nombre del usuario. */
 const getHistory = async (req, res) => {
   try {
-    const generations = await Generation.find({ userId: req.user._id })
+    const generations = await Generation.find({})
       .sort({ createdAt: -1 })
-      .limit(100);
+      .limit(100)
+      .populate("userId", "name");
 
-    res.json({ success: true, history: generations });
+    const history = generations.map((g) => {
+      const obj = g.toObject();
+      obj.creatorName = obj.userId?.name || "Alguien del equipo";
+      obj.userId = obj.userId?._id || obj.userId;
+      return obj;
+    });
+
+    res.json({ success: true, history });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -14,10 +24,7 @@ const getHistory = async (req, res) => {
 
 const deleteHistoryItem = async (req, res) => {
   try {
-    const generation = await Generation.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
+    const generation = await Generation.findById(req.params.id);
 
     if (!generation) {
       return res.status(404).json({ success: false, message: "No encontrado" });
@@ -30,6 +37,8 @@ const deleteHistoryItem = async (req, res) => {
   }
 };
 
+/* "Vaciar historial" solo borra lo propio, para que nadie borre por accidente
+   el trabajo del resto del equipo con un solo clic */
 const clearHistory = async (req, res) => {
   try {
     await Generation.deleteMany({ userId: req.user._id });
@@ -41,10 +50,7 @@ const clearHistory = async (req, res) => {
 
 const toggleFavorite = async (req, res) => {
   try {
-    const generation = await Generation.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
+    const generation = await Generation.findById(req.params.id);
 
     if (!generation) {
       return res.status(404).json({ success: false, message: "No encontrado" });
@@ -61,10 +67,7 @@ const toggleFavorite = async (req, res) => {
 
 const updateImageUrl = async (req, res) => {
   try {
-    const generation = await Generation.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
+    const generation = await Generation.findById(req.params.id);
 
     if (!generation) {
       return res.status(404).json({ success: false, message: "No encontrado" });
@@ -81,7 +84,7 @@ const updateImageUrl = async (req, res) => {
 
 const updateVideoUrl = async (req, res) => {
   try {
-    const generation = await Generation.findOne({ _id: req.params.id, userId: req.user._id });
+    const generation = await Generation.findById(req.params.id);
     if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
     generation.videoUrl = req.body.videoUrl || null;
     await generation.save();
@@ -93,7 +96,7 @@ const updateVideoUrl = async (req, res) => {
 
 const updateOutput = async (req, res) => {
   try {
-    const generation = await Generation.findOne({ _id: req.params.id, userId: req.user._id });
+    const generation = await Generation.findById(req.params.id);
     if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
     generation.output = req.body.output;
     await generation.save();
