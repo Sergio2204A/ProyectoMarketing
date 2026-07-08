@@ -42,7 +42,7 @@ const generateImage = async (req, res) => {
           prompt: prompt.trim(),
           n: 1,
           size: size || "1024x1024",
-          quality: quality || "standard",
+          quality: quality || "auto",
         }),
       });
       const data = await response.json();
