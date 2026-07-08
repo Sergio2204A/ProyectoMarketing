@@ -25,9 +25,9 @@
   --chrome-text-active: #f5f0ea;
   --chrome-hover: rgba(255, 255, 255, 0.04);
 
-  /* Resplandor de tarjetas: nada en modo oscuro, se activa en modo claro */
-  --card-glow: none;
-  --card-glow-hover: none;
+  /* Resplandor azul en cada tarjeta, adaptado para que se vea como un brillo real sobre fondo oscuro */
+  --card-glow: 0 0 0 1.5px rgba(100, 160, 210, 0.4), 0 0 34px rgba(90, 150, 200, 0.3), 0 10px 26px -12px rgba(0, 0, 0, 0.6);
+  --card-glow-hover: 0 0 0 1.5px rgba(100, 160, 210, 0.6), 0 0 48px rgba(90, 150, 200, 0.42), 0 14px 32px -12px rgba(0, 0, 0, 0.65);
 
   --sidebar-width: 230px;
   --header-height: 60px;
@@ -59,8 +59,8 @@
 
   /* Contorno + resplandor azul suave en cada tarjeta — contraste frío contra el naranja cálido de marca,
      para que el modo claro no se sienta plano sin competir con el color de los botones */
-  --card-glow: 0 0 0 1px rgba(61, 107, 150, 0.16), 0 16px 36px -14px rgba(61, 107, 150, 0.55);
-  --card-glow-hover: 0 0 0 1px rgba(61, 107, 150, 0.26), 0 20px 44px -14px rgba(61, 107, 150, 0.65);
+  --card-glow: 0 0 0 1.5px rgba(61, 107, 150, 0.32), 0 0 22px rgba(61, 107, 150, 0.22), 0 16px 36px -14px rgba(61, 107, 150, 0.55);
+  --card-glow-hover: 0 0 0 1.5px rgba(61, 107, 150, 0.48), 0 0 32px rgba(61, 107, 150, 0.32), 0 20px 44px -14px rgba(61, 107, 150, 0.65);
 }
 
 /* En modo claro, las tarjetas de historial/tendencias usan sombras suaves en vez del efecto "cristal oscuro" */
@@ -677,18 +677,12 @@ body {
   position: relative;
   border-radius: var(--border-radius-md);
   background-color: var(--bg-tertiary);
-  box-shadow:
-    0 1px 0 0 rgba(255,255,255,0.05) inset,
-    0 4px 16px rgba(0,0,0,0.4),
-    0 1px 3px rgba(0,0,0,0.5);
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.05) inset, var(--card-glow);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 .history-card:hover {
   transform: translateY(-4px);
-  box-shadow:
-    0 1px 0 0 rgba(255,255,255,0.09) inset,
-    0 14px 34px rgba(0,0,0,0.55),
-    0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.09) inset, var(--card-glow-hover);
 }
 .history-card::before {
   content: "";
@@ -706,20 +700,14 @@ body {
   border-radius: var(--border-radius-md);
   background-color: var(--bg-card);
   border: 1px solid rgba(255,255,255,0.1);
-  box-shadow:
-    0 1px 0 0 rgba(255,255,255,0.06) inset,
-    0 4px 16px rgba(0,0,0,0.4),
-    0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.06) inset, var(--card-glow);
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
   cursor: default;
 }
 .trend-card:hover {
   transform: translateY(-5px) scale(1.01);
   border-color: rgba(255,255,255,0.22);
-  box-shadow:
-    0 1px 0 0 rgba(255,255,255,0.1) inset,
-    0 12px 32px rgba(0,0,0,0.55),
-    0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.1) inset, var(--card-glow-hover);
 }
 .trend-card::before {
   content: "";
