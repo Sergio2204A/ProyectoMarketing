@@ -2,7 +2,14 @@
 
 Marketing AI Workspace es una plataforma web diseñada para ayudar a equipos de marketing, emprendedores y creadores de contenido a generar campañas publicitarias, copys persuasivos, hashtags estratégicos y calendarios de contenido utilizando Inteligencia Artificial.
 
-El proyecto integra un frontend moderno desarrollado con React y un backend basado en Node.js y Express, conectado con Gemini AI para la generación de contenido inteligente.
+El proyecto integra un frontend moderno desarrollado con React y un backend basado en Node.js y Express, conectado con Groq, OpenAI y Runway para la generación de contenido inteligente.
+
+## 🌐 App en vivo
+
+- **Frontend**: https://softgic-marketing.vercel.app
+- **Backend**: https://proyectomarketing.onrender.com (plan gratis: se duerme tras 15 min sin uso, la primera petición tarda ~30-50s en responder)
+
+Ya no depende de correrlo en localhost — el equipo entra directo a la URL de Vercel.
 
 ---
 
@@ -68,6 +75,42 @@ Visualización centralizada de:
 
 ---
 
+### 🎬 Video Studio y Estudio de Imagen
+
+Chat interactivo para generar guiones de video, video real (Runway) e imágenes (Pollinations gratis / OpenAI gpt-image-1 para edición con foto de referencia).
+
+---
+
+### 📄 Exportación a PDF
+
+Cada resultado (campaña, copy, hashtags, calendario, guion de video) se descarga como PDF con formato profesional (encabezado de marca, jerarquía de títulos, paginación) en vez de texto plano.
+
+---
+
+### 👥 Historial compartido por el equipo
+
+Todos los que inician sesión ven las creaciones de todo el equipo, con el nombre de quien creó cada una. Cualquiera puede editar/favorito/eliminar cualquier ítem. "Vaciar historial" solo borra lo propio.
+
+---
+
+### 🏷️ Estados de contenido
+
+Cada creación tiene un estado: **Borrador → Aprobado → Publicado**, editable desde el historial, con filtro dedicado.
+
+---
+
+### 🌗 Modo claro / oscuro
+
+Botón en el header para alternar tema, con persistencia por navegador. El sidebar se mantiene oscuro (el logo es blanco).
+
+---
+
+### 📱 Publicación en redes sociales
+
+Conexión real vía OAuth con Meta (Facebook + Instagram) y TikTok (sujeta a aprobación de Meta/TikTok — ver checklist más abajo). Twitter/X y LinkedIn con conexión manual de tokens.
+
+---
+
 ## 🏗️ Arquitectura del Proyecto
 
 ```text
@@ -118,7 +161,10 @@ MarketingAI/
 
 ### Inteligencia Artificial
 
-* Google Gemini API
+* Groq (texto: campañas, copys, hashtags, calendario, guiones)
+* OpenAI gpt-image-1 (edición de imágenes con referencia)
+* Pollinations.ai (generación de imágenes gratis)
+* Runway (video real)
 
 ---
 
@@ -164,7 +210,7 @@ RUNWAY_API_KEY=
 OPENAI_API_KEY=
 EMAIL_USER=
 EMAIL_APP_PASSWORD=
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=https://softgic-marketing.vercel.app
 
 # Conexión OAuth con Meta (Facebook + Instagram)
 META_APP_ID=
@@ -211,7 +257,7 @@ npm run dev
 Servidor disponible en:
 
 ```text
-http://localhost:3000
+http://localhost:3001
 ```
 
 ---
@@ -326,6 +372,16 @@ POST /calendar
 
 ---
 
+### Historial y estados
+
+```http
+GET   /history                  # historial compartido de todo el equipo
+PATCH /history/:id/status       # draft | approved | published
+PATCH /history/:id/favorite
+```
+
+---
+
 ### Conexión OAuth de redes sociales
 
 ```http
@@ -342,9 +398,12 @@ GET  /social/tiktok/callback     # callback que llama TikTok
 
 ### Versión Actual
 
+* Desplegado en producción (Render + Vercel), ya no depende de localhost
 * Dashboard funcional
 * Generación de campañas, copys, hashtags, calendario, imágenes y video
-* Autenticación de usuarios e historial persistente en MongoDB
+* Autenticación de usuarios e historial compartido por todo el equipo, con estados (Borrador/Aprobado/Publicado)
+* Exportación a PDF con formato profesional
+* Modo claro/oscuro
 * Publicación real en Facebook, Instagram, TikTok (OAuth), Twitter/X y LinkedIn (manual)
 * Tokens de redes sociales cifrados en reposo
 
@@ -352,7 +411,7 @@ GET  /social/tiktok/callback     # callback que llama TikTok
 
 * App Review de Meta y auditoría de TikTok (ver checklist arriba) para uso sin restricciones por todo el equipo
 * OAuth real para Twitter/X y LinkedIn (hoy conexión manual)
-* Despliegue en producción (Railway/Render + Vercel)
+* Perfil de marca (tono/público) aplicado automático a cada generación
 * Análisis de tendencias en tiempo real
 * Métricas y reportes avanzados
 
