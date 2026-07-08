@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useToast } from "../context/ToastContext";
+import { exportResultToPDF } from "../utils/pdfExport";
 
-function ResultCard({ result, activeTab, loading, generationId, onFavorite, onPublish }) {
+function ResultCard({ result, activeTab, loading, generationId, product, onFavorite, onPublish }) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -23,14 +24,7 @@ function ResultCard({ result, activeTab, loading, generationId, onFavorite, onPu
 
   const handleDownload = () => {
     if (!result) return;
-    const text = Array.isArray(result) ? result.join("\n") : result;
-    const labels = { campaign: "campaña", copy: "copy", hashtag: "hashtags" };
-    const filename = `${labels[activeTab] || "resultado"}-${Date.now()}.txt`;
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+    exportResultToPDF({ type: activeTab, product, content: result });
   };
 
   // Un formateador de markdown muy básico y elegante para mostrar texto IA estructurado
@@ -102,10 +96,11 @@ function ResultCard({ result, activeTab, loading, generationId, onFavorite, onPu
           )}
           <button
             onClick={handleDownload}
+            title="Descargar como PDF"
             style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            .txt
+            PDF
           </button>
           <button
             onClick={onPublish}

@@ -6,6 +6,7 @@ import Header from "../components/Header";
 import CampaignForm from "../components/CampaignForm";
 import ResultCard from "../components/ResultCard";
 import PublishModal from "../components/PublishModal";
+import { exportResultToPDF, exportVideoScriptToPDF } from "../utils/pdfExport";
 import {
   getSocialCredentialsAPI,
   saveSocialCredentialsAPI,
@@ -842,23 +843,9 @@ function Home() {
     }
   };
 
-  const handleDownloadVideoStudioScript = (script, idx) => {
+  const handleDownloadVideoStudioScript = (script) => {
     if (!script) return;
-    const lines = [
-      `SCRIPT DE VIDEO — ${videoStudioContext.product || "Marketing"}`,
-      `Formato: ${videoStudioContext.format} | Duración: ${videoStudioContext.duration}`,
-      "", `🎣 HOOK: ${script.hook}`, "",
-      "🎬 ESCENAS:",
-      ...(script.scenes || []).map((s, i) => `  Escena ${i + 1} (${s.time})\n  📷 ${s.visual}\n  🎤 ${s.narration}\n  ✂️ ${s.transition}`),
-      "", `📝 CAPTION:\n${script.caption}`, "",
-      `🚀 CTA: ${script.cta}`, "", `🎵 MÚSICA: ${script.musicTip}`, "",
-      `💡 TIPS:\n${script.productionTips}`,
-    ].join("\n");
-    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `video-script-${Date.now()}.txt`;
-    a.click();
+    exportVideoScriptToPDF({ product: videoStudioContext.product || "Marketing", script });
   };
 
   /* ── Adjuntar video a un script del Video Studio, disponible desde que se genera (no solo ya guardado en historial) ── */
@@ -2302,15 +2289,15 @@ function Home() {
               )}
               <button
                 onClick={() => {
-                  const text = Array.isArray(detailModal.output) ? detailModal.output.join("\n") : typeof detailModal.output === "object" ? JSON.stringify(detailModal.output, null, 2) : detailModal.output;
-                  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url; a.download = `${detailModal.type}-${detailModal.input?.product || "resultado"}-${Date.now()}.txt`; a.click();
-                  URL.revokeObjectURL(url);
+                  const product = detailModal.input?.product || TYPE_LABELS[detailModal.type] || "resultado";
+                  if (detailModal.type === "video" && detailModal.output?.hook) {
+                    exportVideoScriptToPDF({ product, script: detailModal.output });
+                  } else {
+                    exportResultToPDF({ type: detailModal.type, product, content: detailModal.output });
+                  }
                 }}
                 style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-soft)", borderRadius: "var(--border-radius-sm)", padding: "0.45rem 0.9rem", fontSize: "0.8rem", cursor: "pointer" }}>
-                ↓ Descargar .txt
+                ↓ Descargar PDF
               </button>
               <button
                 onClick={closeDetailModal}
@@ -2678,7 +2665,7 @@ function Home() {
                 handleGenerate={handleGenerate}
                 loading={loading}
               />
-              <ResultCard result={result} activeTab={activeTab} loading={loading} generationId={generationId} onFavorite={toggleFavorite} onPublish={() => setPublishModalOpen({ content: result, imageUrl })} />
+              <ResultCard result={result} activeTab={activeTab} loading={loading} generationId={generationId} product={formData.product} onFavorite={toggleFavorite} onPublish={() => setPublishModalOpen({ content: result, imageUrl })} />
 
               {result && !loading && (
                 <div className="section-card" style={{ marginTop: "0" }}>
