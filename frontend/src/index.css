@@ -24,10 +24,13 @@
   --chrome-text-soft: #a09890;
   --chrome-text-active: #f5f0ea;
   --chrome-hover: rgba(255, 255, 255, 0.04);
+  /* Mismo azul de las tarjetas, aplicado al sidebar/header para que combine con el resto */
+  --chrome-glow: inset -1px 0 0 0 rgba(90, 150, 200, 0.25), 4px 0 24px rgba(90, 150, 200, 0.12);
+  --chrome-glow-bottom: inset 0 -1px 0 0 rgba(90, 150, 200, 0.25), 0 4px 20px rgba(90, 150, 200, 0.1);
 
-  /* Resplandor azul en cada tarjeta, adaptado para que se vea como un brillo real sobre fondo oscuro */
-  --card-glow: 0 0 0 1.5px rgba(100, 160, 210, 0.4), 0 0 34px rgba(90, 150, 200, 0.3), 0 10px 26px -12px rgba(0, 0, 0, 0.6);
-  --card-glow-hover: 0 0 0 1.5px rgba(100, 160, 210, 0.6), 0 0 48px rgba(90, 150, 200, 0.42), 0 14px 32px -12px rgba(0, 0, 0, 0.65);
+  /* Resplandor azul en cada tarjeta — más suave que el primer intento, sigue visible sin sentirse forzado */
+  --card-glow: 0 0 0 1px rgba(100, 160, 210, 0.28), 0 0 22px rgba(90, 150, 200, 0.18), 0 10px 26px -12px rgba(0, 0, 0, 0.6);
+  --card-glow-hover: 0 0 0 1.25px rgba(100, 160, 210, 0.42), 0 0 32px rgba(90, 150, 200, 0.26), 0 14px 32px -12px rgba(0, 0, 0, 0.65);
 
   --sidebar-width: 230px;
   --header-height: 60px;
@@ -116,6 +119,7 @@ body {
   width: var(--sidebar-width);
   background-color: var(--chrome-bg);
   border-right: 1px solid var(--chrome-border);
+  box-shadow: var(--chrome-glow);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -214,6 +218,7 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--chrome-border);
+  box-shadow: var(--chrome-glow-bottom);
   display: flex;
   align-items: center;
   justify-content: space-between;
