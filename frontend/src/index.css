@@ -17,8 +17,9 @@
   --border-soft: rgba(255, 255, 255, 0.04);
   --border-focus: rgba(201, 105, 43, 0.5);
 
-  /* Sidebar y header: fijos en oscuro en ambos modos (el logo es blanco) */
+  /* Sidebar y header: cambian junto con el resto de la app */
   --chrome-bg: #0e0d0b;
+  --chrome-header-bg: rgba(20,18,15,0.92);
   --chrome-border: rgba(255, 255, 255, 0.05);
   --chrome-text-muted: #7a746c;
   --chrome-text-soft: #a09890;
@@ -64,6 +65,22 @@
      para que el modo claro no se sienta plano sin competir con el color de los botones */
   --card-glow: 0 0 0 1.5px rgba(61, 107, 150, 0.32), 0 0 22px rgba(61, 107, 150, 0.22), 0 16px 36px -14px rgba(61, 107, 150, 0.55);
   --card-glow-hover: 0 0 0 1.5px rgba(61, 107, 150, 0.48), 0 0 32px rgba(61, 107, 150, 0.32), 0 20px 44px -14px rgba(61, 107, 150, 0.65);
+
+  /* En modo claro el sidebar y el header pasan a claro también, en vez de quedarse fijos en oscuro */
+  --chrome-bg: #ffffff;
+  --chrome-border: rgba(28, 22, 15, 0.08);
+  --chrome-text-muted: #948c81;
+  --chrome-text-soft: #55504a;
+  --chrome-text-active: #1c1a17;
+  --chrome-hover: rgba(28, 22, 15, 0.05);
+  --chrome-header-bg: rgba(255,255,255,0.85);
+  --chrome-glow: inset -1px 0 0 0 rgba(61, 107, 150, 0.18), 4px 0 20px rgba(61, 107, 150, 0.1);
+  --chrome-glow-bottom: inset 0 -1px 0 0 rgba(61, 107, 150, 0.18), 0 4px 16px rgba(61, 107, 150, 0.08);
+}
+
+/* El logo es blanco — en modo claro se invierte para que se vea oscuro sobre el sidebar claro */
+:root[data-theme="light"] .sidebar-logo-img {
+  filter: invert(1);
 }
 
 /* En modo claro, las tarjetas de historial/tendencias usan sombras suaves en vez del efecto "cristal oscuro" */
@@ -214,7 +231,7 @@ body {
 /* ── TOP HEADER ── */
 .top-header {
   height: var(--header-height);
-  background-color: rgba(20,18,15,0.92);
+  background-color: var(--chrome-header-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--chrome-border);
