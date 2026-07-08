@@ -95,14 +95,14 @@ function ResultCard({ result, activeTab, loading, generationId, onFavorite, onPu
             <button
               onClick={handleFavorite}
               title={isFavorite ? "Quitar de favoritos" : "Guardar en favoritos"}
-              style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: isFavorite ? "rgba(250,204,21,0.1)" : "transparent", border: `1px solid ${isFavorite ? "rgba(250,204,21,0.4)" : "rgba(255,255,255,0.1)"}`, borderRadius: "var(--border-radius-md)", color: isFavorite ? "#fbbf24" : "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", transition: "all 0.2s" }}
+              style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: isFavorite ? "rgba(250,204,21,0.1)" : "transparent", border: `1px solid ${isFavorite ? "rgba(250,204,21,0.4)" : "var(--border-color)"}`, borderRadius: "var(--border-radius-md)", color: isFavorite ? "#b8860b" : "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", transition: "all 0.2s" }}
             >
               {isFavorite ? "★" : "☆"} Favorito
             </button>
           )}
           <button
             onClick={handleDownload}
-            style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+            style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             .txt

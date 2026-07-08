@@ -979,9 +979,9 @@ function Home() {
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <div style={{ maxWidth: "70%", display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-end" }}>
                   {msg.filePreview && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "12px", padding: "0.4rem 0.6rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "0.4rem 0.6rem" }}>
                       <img src={msg.filePreview} alt="ref" style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "6px" }} />
-                      <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.85)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.fileName}</span>
+                      <span style={{ fontSize: "0.72rem", color: "var(--text-soft)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.fileName}</span>
                     </div>
                   )}
                   <div style={{ background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", padding: "0.65rem 1rem", borderRadius: "18px 18px 4px 18px", color: "#fff", fontSize: "0.875rem", lineHeight: "1.5" }}>
@@ -1870,7 +1870,7 @@ function Home() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {filtered.map((item) => (
-              <div key={item._id} className="history-card" style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.3)" : "rgba(255,255,255,0.1)"}`, padding: "1.25rem 1.5rem" }}>
+              <div key={item._id} className="history-card" style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.35)" : "var(--border-color)"}`, padding: "1.25rem 1.5rem" }}>
                 <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", justifyContent: "flex-end", marginBottom: "0.75rem", flexWrap: "wrap" }}>
                   {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
                     <button onClick={() => { setRefineModal(item); setRefineResult(""); }} title="Perfeccionar con IA" className="btn-action-refine">
@@ -2048,7 +2048,7 @@ function Home() {
                     </button>
                   </div>
                   {!detailImageUrl && !detailImageLoading && (
-                    <div style={{ minHeight: "160px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.6rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                    <div style={{ minHeight: "160px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.6rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
                       <span style={{ fontSize: "2rem" }}>🎨</span>
                       <p style={{ margin: 0 }}>Haz clic en "Generar imagen" para crear una visual para esta campaña</p>
                     </div>
@@ -2122,7 +2122,7 @@ function Home() {
                   )}
 
                   {!detailVideoResult && !detailVideoLoading && (
-                    <div style={{ minHeight: "80px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", color: "var(--text-muted)", fontSize: "0.83rem" }}>
+                    <div style={{ minHeight: "80px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", color: "var(--text-muted)", fontSize: "0.83rem" }}>
                       <span style={{ fontSize: "1.5rem" }}>🎬</span>
                       Elige formato y duración, luego haz clic en "Generar Video Script"
                     </div>
@@ -2725,7 +2725,7 @@ function Home() {
                   )}
 
                   {!inlineVideoResult && !inlineVideoLoading && (
-                    <div style={{ minHeight: "100px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                    <div style={{ minHeight: "100px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
                       <span style={{ fontSize: "1.8rem" }}>🎬</span>
                       <p style={{ margin: 0 }}>Elige formato y duración, luego haz clic en "Generar Video Script"</p>
                     </div>
@@ -2827,7 +2827,7 @@ function Home() {
                   </div>
 
                   {!imageUrl ? (
-                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "var(--text-muted)", fontSize: "0.9rem" }}>
                       <span style={{ fontSize: "2rem" }}>🎨</span>
                       <p>Haz clic en "Generar imagen" para crear una visual para esta campaña</p>
                     </div>
