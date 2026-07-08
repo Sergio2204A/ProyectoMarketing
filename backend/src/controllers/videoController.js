@@ -54,7 +54,7 @@ const generateRealVideo = async (req, res) => {
         "X-Runway-Version": RUNWAY_VERSION,
       },
       body: JSON.stringify({
-        promptImage: startImage,
+        promptImage: [{ uri: startImage, position: "first" }],
         promptText: prompt || `${product}, cinematic camera movement, professional marketing video`,
         model: "gen4_turbo",
         ratio: "1280:720",
@@ -64,8 +64,7 @@ const generateRealVideo = async (req, res) => {
 
     const data = await runwayRes.json();
     if (!runwayRes.ok) {
-      console.error("Runway error completo:", JSON.stringify(data));
-      throw new Error(JSON.stringify(data));
+      throw new Error(data.error || data.message || "Error al iniciar la generación en Runway");
     }
 
     res.json({ success: true, taskId: data.id, startImage });
