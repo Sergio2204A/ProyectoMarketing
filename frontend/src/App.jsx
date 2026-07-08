@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
+import { pingServer } from "./services/authService";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -12,6 +13,10 @@ function AppContent() {
   const { user } = useAuth();
   const urlResetToken = new URLSearchParams(window.location.search).get("resetToken");
   const [authView, setAuthView] = useState(urlResetToken ? "reset" : "login");
+
+  /* El backend gratuito "duerme" tras inactividad — lo despertamos apenas carga la página
+     para que, cuando la persona termine de escribir sus credenciales, ya esté listo */
+  useEffect(() => { pingServer(); }, []);
 
   const backToLogin = () => {
     if (urlResetToken) window.history.replaceState({}, "", window.location.pathname);

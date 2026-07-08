@@ -2,6 +2,11 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
+/* Despierta el backend con anticipación (Render "duerme" tras inactividad) para que el login/registro real sea rápido */
+export const pingServer = () => {
+  axios.get(`${API_URL}/health`).catch(() => {});
+};
+
 export const loginUser = async (email, password) => {
   const response = await axios.post(`${API_URL}/auth/login`, { email, password });
   return response.data;

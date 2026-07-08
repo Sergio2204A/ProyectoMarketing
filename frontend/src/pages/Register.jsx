@@ -7,6 +7,7 @@ function Register({ onSwitchToLogin }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slowLoading, setSlowLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,12 +17,16 @@ function Register({ onSwitchToLogin }) {
       return;
     }
     setLoading(true);
+    setSlowLoading(false);
+    const slowTimer = setTimeout(() => setSlowLoading(true), 4000);
     try {
       await register(form.name, form.email, form.password);
     } catch (err) {
       setError(err.response?.data?.message || "Error al registrarse");
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setSlowLoading(false);
     }
   };
 
@@ -75,6 +80,9 @@ function Register({ onSwitchToLogin }) {
           <button type="submit" className="btn-primary" disabled={loading} style={{ width: "100%", marginTop: "0.5rem" }}>
             {loading ? "Creando cuenta..." : "Crear cuenta"}
           </button>
+          {slowLoading && (
+            <p style={styles.hint}>⏳ El servidor estaba inactivo y está despertando, puede tardar unos segundos más...</p>
+          )}
         </form>
 
         <p style={styles.switchText}>
@@ -100,6 +108,7 @@ const styles = {
   label: { fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em" },
   input: { backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.75rem 1rem", color: "var(--text-active)", fontSize: "0.95rem", outline: "none" },
   error: { color: "#f87171", fontSize: "0.85rem", textAlign: "center" },
+  hint: { color: "var(--text-muted)", fontSize: "0.78rem", textAlign: "center", marginTop: "0.25rem" },
   switchText: { color: "var(--text-muted)", fontSize: "0.875rem", textAlign: "center", marginTop: "1.5rem" },
   link: { background: "none", border: "none", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600", padding: 0 },
 };
