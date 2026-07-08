@@ -25,6 +25,7 @@ import {
   deleteHistoryItemAPI,
   clearHistoryAPI,
   toggleFavoriteAPI,
+  updateStatusAPI,
   generateTrendsAPI,
   refineContentAPI,
   updateImageUrlAPI,
@@ -39,6 +40,12 @@ import {
 } from "../services/campaignService";
 
 const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario", video: "Video Script" };
+const STATUS_CONFIG = {
+  draft: { label: "Borrador", color: "#948c81", bg: "rgba(148,140,129,0.14)" },
+  approved: { label: "Aprobado", color: "#3d8bd6", bg: "rgba(61,139,214,0.14)" },
+  published: { label: "Publicado", color: "#2f9e5c", bg: "rgba(47,158,92,0.14)" },
+};
+const STATUS_ORDER = ["draft", "approved", "published"];
 
 function Home() {
   const { user } = useAuth();
@@ -225,6 +232,13 @@ function Home() {
       setHistory((prev) => prev.map((item) => item._id === id ? { ...item, isFavorite: data.isFavorite } : item));
       showToast(data.isFavorite ? "Agregado a favoritos ⭐" : "Quitado de favoritos", "info");
     } catch (err) { showToast("Error al actualizar favorito", "error"); }
+  };
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      await updateStatusAPI(id, status);
+      setHistory((prev) => prev.map((item) => item._id === id ? { ...item, status } : item));
+    } catch (err) { showToast("Error al cambiar el estado", "error"); }
   };
 
   const handleGenerateCalendarAI = async () => {
@@ -1805,9 +1819,13 @@ function Home() {
       { id: "campaign", label: "Campañas" }, { id: "copy", label: "Copys" },
       { id: "hashtag", label: "Hashtags" }, { id: "calendar", label: "Calendarios" },
       { id: "video", label: "🎬 Videos" },
+      { id: "status:draft", label: "Borrador" }, { id: "status:approved", label: "Aprobado" }, { id: "status:published", label: "Publicado" },
     ];
     const filtered = history.filter((item) => {
-      const matchesFilter = historyFilter === "all" ? true : historyFilter === "favorites" ? item.isFavorite : item.type === historyFilter;
+      const matchesFilter = historyFilter === "all" ? true
+        : historyFilter === "favorites" ? item.isFavorite
+        : historyFilter.startsWith("status:") ? (item.status || "draft") === historyFilter.replace("status:", "")
+        : item.type === historyFilter;
       const q = historySearch.toLowerCase();
       const matchesSearch = !q || (item.input?.product || "").toLowerCase().includes(q) || (typeof item.output === "string" && item.output.toLowerCase().includes(q));
       return matchesFilter && matchesSearch;
@@ -1904,6 +1922,19 @@ function Home() {
                       {item.creatorName}
                     </span>
                   )}
+                  <select
+                    value={item.status || "draft"}
+                    onChange={(e) => handleUpdateStatus(item._id, e.target.value)}
+                    title="Cambiar estado"
+                    style={{
+                      fontSize: "0.72rem", fontWeight: "700", border: "none", borderRadius: "999px",
+                      padding: "0.2rem 0.6rem", cursor: "pointer", outline: "none",
+                      color: STATUS_CONFIG[item.status || "draft"].color,
+                      background: STATUS_CONFIG[item.status || "draft"].bg,
+                    }}
+                  >
+                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
+                  </select>
                 </div>
                 <h4 style={{ color: "var(--text-active)", fontSize: "1rem", marginBottom: "0.1rem", fontWeight: "700", letterSpacing: "-0.02em", borderLeft: "3px solid var(--accent-primary)", paddingLeft: "0.6rem" }}>
                   {item.input?.product || "Sin nombre"}
@@ -1968,6 +1999,22 @@ function Home() {
                   </span>
                   {detailModal.isFavorite && <span style={{ fontSize: "0.85rem" }}>⭐</span>}
                   <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{new Date(detailModal.createdAt).toLocaleString()}</span>
+                  <select
+                    value={detailModal.status || "draft"}
+                    onChange={(e) => {
+                      handleUpdateStatus(detailModal._id, e.target.value);
+                      setDetailModal((prev) => prev && { ...prev, status: e.target.value });
+                    }}
+                    title="Cambiar estado"
+                    style={{
+                      fontSize: "0.72rem", fontWeight: "700", border: "none", borderRadius: "999px",
+                      padding: "0.2rem 0.6rem", cursor: "pointer", outline: "none",
+                      color: STATUS_CONFIG[detailModal.status || "draft"].color,
+                      background: STATUS_CONFIG[detailModal.status || "draft"].bg,
+                    }}
+                  >
+                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
+                  </select>
                 </div>
                 <h3 style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "1.05rem", margin: 0 }}>
                   {detailModal.input?.product || "Sin nombre"}

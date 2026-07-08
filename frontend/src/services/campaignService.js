@@ -46,6 +46,11 @@ export const toggleFavoriteAPI = async (id) => {
   return response.data;
 };
 
+export const updateStatusAPI = async (id, status) => {
+  const response = await axios.patch(`${API_URL}/history/${id}/status`, { status }, { headers: authHeader() });
+  return response.data;
+};
+
 export const generateTrendsAPI = async (topic) => {
   const response = await axios.post(`${API_URL}/trends`, { topic }, { headers: authHeader() });
   return response.data;

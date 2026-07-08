@@ -106,6 +106,24 @@ const updateOutput = async (req, res) => {
   }
 };
 
+const VALID_STATUSES = ["draft", "approved", "published"];
+
+const updateStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ success: false, message: "Estado no válido" });
+    }
+    const generation = await Generation.findById(req.params.id);
+    if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
+    generation.status = status;
+    await generation.save();
+    res.json({ success: true, status: generation.status });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const saveGeneration = async (req, res) => {
   try {
     const { type, input, output } = req.body;
@@ -116,4 +134,4 @@ const saveGeneration = async (req, res) => {
   }
 };
 
-module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, saveGeneration };
+module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, updateStatus, saveGeneration };

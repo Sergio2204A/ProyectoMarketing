@@ -32,6 +32,11 @@ const GenerationSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    status: {
+      type: String,
+      enum: ["draft", "approved", "published"],
+      default: "draft",
+    },
   },
   {
     timestamps: true,
