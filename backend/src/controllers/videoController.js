@@ -5,6 +5,16 @@ const RUNWAY_API_KEY = process.env.RUNWAY_API_KEY;
 const RUNWAY_API_URL = "https://api.dev.runwayml.com/v1";
 const RUNWAY_VERSION = "2024-11-06";
 
+/* Runway valida el Content-Length de la imagen de origen; Pollinations.ai no lo manda,
+   así que descargamos la imagen y se la pasamos como data URI en vez de la URL directa. */
+async function toDataUri(url) {
+  if (url.startsWith("data:")) return url;
+  const imgRes = await fetch(url);
+  const buffer = Buffer.from(await imgRes.arrayBuffer());
+  const contentType = imgRes.headers.get("content-type") || "image/png";
+  return `data:${contentType};base64,${buffer.toString("base64")}`;
+}
+
 const generateVideoScript = async (req, res) => {
   const { product, format, duration, goal, audience, country, region } = req.body;
 
@@ -46,6 +56,8 @@ const generateRealVideo = async (req, res) => {
         `${prompt || product}, professional marketing photo, cinematic, no text, no watermark, high quality, 4k`
       )}?width=1280&height=768&nologo=true&model=flux&seed=${Date.now()}`;
 
+    const startImageUri = await toDataUri(startImage);
+
     const runwayRes = await fetch(`${RUNWAY_API_URL}/image_to_video`, {
       method: "POST",
       headers: {
@@ -54,7 +66,7 @@ const generateRealVideo = async (req, res) => {
         "X-Runway-Version": RUNWAY_VERSION,
       },
       body: JSON.stringify({
-        promptImage: [{ uri: startImage, position: "first" }],
+        promptImage: [{ uri: startImageUri, position: "first" }],
         promptText: prompt || `${product}, cinematic camera movement, professional marketing video`,
         model: "gen4_turbo",
         ratio: "1280:720",
@@ -64,7 +76,7 @@ const generateRealVideo = async (req, res) => {
 
     const data = await runwayRes.json();
     if (!runwayRes.ok) {
-      throw new Error(JSON.stringify(data));
+      throw new Error(data.error || data.message || "Error al iniciar la generación en Runway");
     }
 
     res.json({ success: true, taskId: data.id, startImage });
