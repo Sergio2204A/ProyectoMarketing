@@ -212,6 +212,32 @@ body {
   padding-left: calc(0.8rem - 2px);
 }
 .sidebar-nav li.active a svg { opacity: 1; color: var(--accent-secondary); }
+.sidebar-badge {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--chrome-text-soft);
+  background: var(--chrome-hover);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  min-width: 1.1rem;
+  text-align: center;
+}
+.sidebar-nav li.active a .sidebar-badge {
+  color: var(--accent-secondary);
+  background: rgba(201,105,43,0.18);
+}
+.sidebar-badge-notify {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-primary);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  min-width: 1.1rem;
+  text-align: center;
+}
 
 .sidebar-footer {
   margin-top: auto;

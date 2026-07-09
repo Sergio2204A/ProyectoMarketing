@@ -2756,9 +2756,15 @@ function Home() {
   );
 
   /* ── RENDER PRINCIPAL ── */
+  const sidebarCounts = {
+    campaign: history.filter((h) => h.type === "campaign").length,
+    copy: history.filter((h) => h.type === "copy").length,
+    hashtag: history.filter((h) => h.type === "hashtag").length,
+  };
+
   return (
     <div className="app-shell">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} counts={sidebarCounts} upcomingCount={upcoming.length} />
       <div className="app-body">
         <Header activeTab={activeTab} />
         <div className="main-content">
