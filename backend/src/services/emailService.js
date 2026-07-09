@@ -35,4 +35,28 @@ async function sendPasswordResetEmail(to, resetUrl) {
   });
 }
 
-module.exports = { sendPasswordResetEmail };
+async function sendCalendarReminderEmail(to, dayItem) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+    throw new Error("Falta configurar EMAIL_USER y EMAIL_APP_PASSWORD en el archivo .env del backend.");
+  }
+
+  await transporter.sendMail({
+    from: `"Marketing AI" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: `Hoy toca publicar: ${dayItem.topic} — Marketing AI`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1a1a1a;">Hoy toca publicar 📅</h2>
+        <p style="color: #555; line-height: 1.6;">
+          Según tu calendario de contenidos, hoy (<strong>${dayItem.day}</strong>) te toca publicar:
+        </p>
+        <p style="color: #1a1a1a; font-weight: bold; margin: 16px 0 4px;">${dayItem.topic}</p>
+        <p style="color: #555; line-height: 1.6; white-space: pre-line;">${dayItem.caption}</p>
+        <p style="color: #555; line-height: 1.6;"><strong>Idea visual:</strong> ${dayItem.visualIdea}</p>
+        <p style="color: #999; font-size: 13px;"><strong>Hora recomendada:</strong> ${dayItem.bestTime}</p>
+      </div>
+    `,
+  });
+}
+
+module.exports = { sendPasswordResetEmail, sendCalendarReminderEmail };

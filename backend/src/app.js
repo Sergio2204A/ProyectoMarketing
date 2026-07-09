@@ -16,8 +16,10 @@ const imageRoutes = require("./routes/imageRoutes");
 const socialAuthRoutes = require("./routes/socialAuthRoutes");
 
 const connectDB = require("./db");
+const { startReminderScheduler } = require("./services/reminderScheduler");
 
 connectDB();
+startReminderScheduler();
 
 const app = express();
 
