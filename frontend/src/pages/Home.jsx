@@ -22,6 +22,7 @@ import {
   generateHashtags,
   generateCalendar,
   getHistory,
+  getUpcomingCalendarAPI,
   deleteHistoryItemAPI,
   clearHistoryAPI,
   toggleFavoriteAPI,
@@ -59,6 +60,7 @@ function Home() {
   const [imageError, setImageError] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
   const [history, setHistory] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
   const [formData, setFormData] = useState({ product: "", goal: "", audience: "", channel: "", country: "", region: "" });
 
   const today = new Date();
@@ -163,7 +165,16 @@ function Home() {
     }
   }, []);
 
-  useEffect(() => { loadHistory(); }, [loadHistory]);
+  const loadUpcoming = useCallback(async () => {
+    try {
+      const data = await getUpcomingCalendarAPI();
+      setUpcoming(data.upcoming);
+    } catch (err) {
+      console.error("Error al cargar las próximas publicaciones:", err);
+    }
+  }, []);
+
+  useEffect(() => { loadHistory(); loadUpcoming(); }, [loadHistory, loadUpcoming]);
   useEffect(() => { if (activeTab === "social") loadSocialCreds(); }, [activeTab]);
 
   /* ── Retorno del OAuth de Meta/TikTok (el backend redirige aquí con ?social=...) ── */
@@ -571,6 +582,15 @@ function Home() {
       if (h < 24) return `${h}h`;
       return `${Math.floor(h / 24)}d`;
     };
+    const dayLabel = (dateStr) => {
+      const date = new Date(dateStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((date.getTime() - today.getTime()) / 86400000);
+      if (diffDays === 0) return { text: "Hoy", urgent: true };
+      if (diffDays === 1) return { text: "Mañana", urgent: true };
+      return { text: date.toLocaleDateString("es-ES", { weekday: "long" }), urgent: false };
+    };
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -698,6 +718,46 @@ function Home() {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="section-card">
+          <div className="section-card-header">
+            <span className="section-title">📅 Próximas publicaciones</span>
+            {upcoming.length > 0 && (
+              <button onClick={() => setActiveTab("calendar")}
+                style={{ fontSize: "0.78rem", color: "var(--accent-secondary)", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}>
+                Ver calendario →
+              </button>
+            )}
+          </div>
+          {upcoming.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "2rem 0", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+              <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🗓️</div>
+              No tienes publicaciones programadas esta semana.
+            </div>
+          ) : (
+            <div className="activity-list">
+              {upcoming.map((item, index) => {
+                const label = dayLabel(item.scheduledDate);
+                return (
+                  <div key={`${item.generationId}-${index}`} className="activity-item">
+                    <span
+                      className="activity-badge"
+                      style={{
+                        background: label.urgent ? "rgba(201,105,43,0.15)" : "rgba(148,140,129,0.14)",
+                        color: label.urgent ? "var(--accent-secondary)" : "var(--text-muted)",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {label.text}
+                    </span>
+                    <span className="activity-product">{item.topic || item.product}</span>
+                    {item.creatorName && <span className="activity-time" style={{ color: "var(--accent-secondary)" }}>{item.creatorName}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );

@@ -31,6 +31,11 @@ export const getHistory = async () => {
   return response.data;
 };
 
+export const getUpcomingCalendarAPI = async () => {
+  const response = await axios.get(`${API_URL}/calendar/upcoming`, { headers: authHeader() });
+  return response.data;
+};
+
 export const deleteHistoryItemAPI = async (id) => {
   const response = await axios.delete(`${API_URL}/history/${id}`, { headers: authHeader() });
   return response.data;

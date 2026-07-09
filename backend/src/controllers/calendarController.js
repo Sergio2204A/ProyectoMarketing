@@ -60,4 +60,45 @@ const generateCalendar = async (req, res) => {
   }
 };
 
-module.exports = { generateCalendar };
+const getUpcoming = async (req, res) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const sevenDaysLater = new Date(todayStart);
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+
+    const calendars = await Generation.find({
+      type: "calendar",
+      "output.scheduledDate": { $gte: todayStart, $lt: sevenDaysLater },
+    }).populate("userId", "name");
+
+    const upcoming = [];
+    for (const generation of calendars) {
+      for (const item of generation.output) {
+        const scheduledDate = new Date(item.scheduledDate);
+        if (scheduledDate >= todayStart && scheduledDate < sevenDaysLater) {
+          upcoming.push({
+            generationId: generation._id,
+            product: generation.input?.product || "Sin nombre",
+            day: item.day,
+            topic: item.topic,
+            scheduledDate: item.scheduledDate,
+            creatorName: generation.userId?.name || "Alguien del equipo",
+          });
+        }
+      }
+    }
+
+    upcoming.sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+
+    res.json({ success: true, upcoming });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener las próximas publicaciones",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { generateCalendar, getUpcoming };
