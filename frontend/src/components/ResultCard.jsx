@@ -2,9 +2,24 @@ import { useState } from "react";
 import { useToast } from "../context/ToastContext";
 import { exportResultToPDF } from "../utils/pdfExport";
 
+// Detecta las variantes "Variación N (Fórmula ...)" que ya pide el prompt de copys.
+// Devuelve null si no encuentra al menos 2 (fallback al render de texto normal).
+function splitCopyVariants(text) {
+  const regex = /(?:^|\n)\s*#{0,3}\s*\*{0,2}(Variaci[oó]n\s*\d+[^\n*]*)\*{0,2}[^\n]*/gi;
+  const matches = [...text.matchAll(regex)];
+  if (matches.length < 2) return null;
+
+  return matches.map((match, i) => {
+    const start = match.index + match[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    return { title: match[1].trim(), body: text.slice(start, end).trim() };
+  });
+}
+
 function ResultCard({ result, activeTab, loading, generationId, product, onFavorite, onPublish }) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [copiedVariant, setCopiedVariant] = useState(null);
   const [isFavorite, setIsFavorite] = useState(false);
 
   const handleFavorite = async () => {
@@ -20,6 +35,12 @@ function ResultCard({ result, activeTab, loading, generationId, product, onFavor
     navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyVariant = (index, body) => {
+    navigator.clipboard.writeText(body);
+    setCopiedVariant(index);
+    setTimeout(() => setCopiedVariant((current) => (current === index ? null : current)), 2000);
   };
 
   const handleDownload = () => {
@@ -167,6 +188,27 @@ function ResultCard({ result, activeTab, loading, generationId, product, onFavor
               >
                 {tag}
               </span>
+            ))}
+          </div>
+        ) : activeTab === "copy" && typeof result === "string" && splitCopyVariants(result) ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1rem", width: "100%" }}>
+            {splitCopyVariants(result).map((variant, index) => (
+              <div
+                key={index}
+                className="section-card"
+                style={{ padding: "1.1rem 1.2rem", border: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: "0.5rem" }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                  <h4 style={{ margin: 0, fontSize: "0.85rem", color: "var(--accent-secondary)", fontWeight: "700" }}>{variant.title}</h4>
+                  <button
+                    onClick={() => handleCopyVariant(index, variant.body)}
+                    style={{ height: "28px", padding: "0 0.7rem", fontSize: "0.72rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", color: "var(--text-soft)", cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {copiedVariant === index ? "¡Copiado!" : "Copiar"}
+                  </button>
+                </div>
+                <div style={{ fontSize: "0.92rem" }}>{renderFormattedText(variant.body)}</div>
+              </div>
             ))}
           </div>
         ) : (
