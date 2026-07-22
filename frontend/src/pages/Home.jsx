@@ -46,8 +46,8 @@ import {
 
 const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario", video: "Video Script" };
 const QUALITY_OPTIONS = [
-  { value: "low", label: "Borrador" },
-  { value: "medium", label: "Estándar" },
+  { value: "low", label: "Baja" },
+  { value: "medium", label: "Media" },
   { value: "high", label: "Premium" },
 ];
 const STATUS_CONFIG = {
@@ -1351,7 +1351,7 @@ function Home() {
     if (quality === "low" && file) {
       setStudioMessages((prev) => [...prev, {
         id: Date.now(), prompt, referencePreview, result: null,
-        error: "Borrador no soporta imagen de referencia (logo/foto) — sube a Estándar o Premium para editar con tu propia imagen.",
+        error: "Baja no soporta imagen de referencia (logo/foto) — sube a Media o Premium para editar con tu propia imagen.",
       }]);
       return;
     }
@@ -1362,12 +1362,25 @@ function Home() {
     setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
 
     if (quality === "low") {
-      /* Borrador: Pollinations.ai, gratis y sin backend — mismo motor que ya usa el botón rápido de campañas */
+      /* Baja: Pollinations.ai, gratis y sin backend — mismo motor que ya usa el botón rápido de campañas.
+         Se trae como blob y se valida antes de mostrarla, porque Pollinations a veces responde con un
+         error (rate limit, prompt bloqueado) en vez de una imagen, y un <img src> roto no avisa nada. */
       const [w, h] = (size || "1024x1024").split("x").map(Number);
       const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&model=flux&seed=${Date.now()}`;
-      setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, result: url } : m));
-      setStudioLoading(false);
-      setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        if (!res.ok || !blob.type.startsWith("image/")) {
+          throw new Error("Pollinations no pudo generar la imagen (puede estar saturado). Intenta de nuevo en unos segundos.");
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, result: objectUrl } : m));
+      } catch (err) {
+        setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, error: err.message || "Error al generar la imagen. Intenta de nuevo." } : m));
+      } finally {
+        setStudioLoading(false);
+        setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      }
       return;
     }
 
@@ -1456,12 +1469,12 @@ function Home() {
   const handleStudioDownload = async (resultUrl, idx) => {
     const a = document.createElement("a");
     a.download = `imagen-marketing-${idx + 1}-${Date.now()}.png`;
-    if (resultUrl.startsWith("data:")) {
+    if (resultUrl.startsWith("data:") || resultUrl.startsWith("blob:")) {
       a.href = resultUrl;
       a.click();
       return;
     }
-    /* URL externa (Pollinations): hay que traerla como blob, el atributo download no aplica cross-origin */
+    /* URL externa: hay que traerla como blob, el atributo download no aplica cross-origin */
     try {
       const res = await fetch(resultUrl);
       const blob = await res.blob();
@@ -1656,7 +1669,7 @@ function Home() {
               Genera imágenes de mayor calidad
             </h3>
             <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: "1.6", marginBottom: "0.75rem" }}>
-              Ingresa tu API de confianza y desbloquea <strong>Estándar</strong> y <strong>Premium</strong> — mejores resultados, con tu propia cuenta y a tu propio ritmo. Borrador sigue siendo gratis para todos. Tu key se guarda cifrada y nunca se vuelve a mostrar completa.
+              Ingresa tu API de confianza y desbloquea <strong>Media</strong> y <strong>Premium</strong> — mejores resultados, con tu propia cuenta y a tu propio ritmo. Baja sigue siendo gratis para todos. Tu key se guarda cifrada y nunca se vuelve a mostrar completa.
             </p>
             <button
               type="button"
