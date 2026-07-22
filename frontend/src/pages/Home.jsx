@@ -1348,10 +1348,29 @@ function Home() {
   };
 
   const sendImageGeneration = async ({ prompt, file, size, quality, referencePreview }) => {
+    if (quality === "low" && file) {
+      setStudioMessages((prev) => [...prev, {
+        id: Date.now(), prompt, referencePreview, result: null,
+        error: "Borrador no soporta imagen de referencia (logo/foto) — sube a Estándar o Premium para editar con tu propia imagen.",
+      }]);
+      return;
+    }
+
     setStudioLoading(true);
     const pendingMsg = { id: Date.now(), prompt, referencePreview: referencePreview || null, result: null, error: null };
     setStudioMessages((prev) => [...prev, pendingMsg]);
     setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
+    if (quality === "low") {
+      /* Borrador: Pollinations.ai, gratis y sin backend — mismo motor que ya usa el botón rápido de campañas */
+      const [w, h] = (size || "1024x1024").split("x").map(Number);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&model=flux&seed=${Date.now()}`;
+      setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, result: url } : m));
+      setStudioLoading(false);
+      setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      return;
+    }
+
     try {
       const data = await generateImageOpenAIAPI(prompt, file, size, quality);
       const dataUrl = `data:${data.mimeType};base64,${data.b64}`;
@@ -1434,11 +1453,23 @@ function Home() {
     }
   };
 
-  const handleStudioDownload = (dataUrl, idx) => {
+  const handleStudioDownload = async (resultUrl, idx) => {
     const a = document.createElement("a");
-    a.href = dataUrl;
     a.download = `imagen-marketing-${idx + 1}-${Date.now()}.png`;
-    a.click();
+    if (resultUrl.startsWith("data:")) {
+      a.href = resultUrl;
+      a.click();
+      return;
+    }
+    /* URL externa (Pollinations): hay que traerla como blob, el atributo download no aplica cross-origin */
+    try {
+      const res = await fetch(resultUrl);
+      const blob = await res.blob();
+      a.href = URL.createObjectURL(blob);
+      a.click();
+    } catch {
+      showToast("Error al descargar la imagen", "error");
+    }
   };
 
   const renderImageStudio = () => (
