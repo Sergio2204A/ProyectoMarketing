@@ -6,7 +6,7 @@ const { ensureFreshTikTokToken } = require("./socialAuthController");
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 const TIKTOK_API = "https://open.tiktokapis.com/v2";
 const VALID_PLATFORMS = ["facebook", "instagram", "tiktok", "twitter", "linkedin"];
-const OAUTH_MANAGED_PLATFORMS = ["facebook", "instagram", "tiktok"];
+const OAUTH_MANAGED_PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin"];
 
 /* ── OAuth 1.0a para Twitter ── */
 function buildTwitterOAuthHeader(method, url, apiKey, apiSecret, accessToken, accessTokenSecret) {

@@ -107,7 +107,7 @@ Botón en el header para alternar tema, con persistencia por navegador. El sideb
 
 ### 📱 Publicación en redes sociales
 
-Conexión real vía OAuth con Meta (Facebook + Instagram) y TikTok (sujeta a aprobación de Meta/TikTok — ver checklist más abajo). Twitter/X y LinkedIn con conexión manual de tokens.
+Conexión real vía OAuth con Meta (Facebook + Instagram), TikTok y LinkedIn (sujeta a aprobación de Meta/TikTok/LinkedIn — ver checklist más abajo). Twitter/X con conexión manual de tokens.
 
 ---
 
@@ -222,6 +222,11 @@ TIKTOK_CLIENT_KEY=
 TIKTOK_CLIENT_SECRET=
 TIKTOK_REDIRECT_URI=http://localhost:3001/social/tiktok/callback
 
+# Conexión OAuth con LinkedIn
+LINKEDIN_CLIENT_ID=
+LINKEDIN_CLIENT_SECRET=
+LINKEDIN_REDIRECT_URI=http://localhost:3001/social/linkedin/callback
+
 # Clave para cifrar los tokens de redes sociales en MongoDB (generar una sola vez)
 # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 SOCIAL_TOKEN_ENCRYPTION_KEY=
@@ -229,9 +234,9 @@ SOCIAL_TOKEN_ENCRYPTION_KEY=
 
 ---
 
-## 🔐 Checklist para que el equipo conecte Facebook/Instagram/TikTok sin fricción
+## 🔐 Checklist para que el equipo conecte Facebook/Instagram/TikTok/LinkedIn sin fricción
 
-La conexión de cuentas ya no pide tokens manuales: hay un botón "Conectar con Meta" y otro "Conectar con TikTok" en la sección **Redes Sociales**. Para que **cualquier persona del equipo** (no solo el desarrollador) pueda usarlo, falta completar estos trámites — son gestiones de negocio en los paneles de Meta/TikTok, no requieren tocar código:
+La conexión de cuentas ya no pide tokens manuales: hay un botón "Conectar con Meta", "Conectar con TikTok" y "Conectar con LinkedIn" en la sección **Redes Sociales**. Para que **cualquier persona del equipo** (no solo el desarrollador) pueda usarlo, falta completar estos trámites — son gestiones de negocio en los paneles de Meta/TikTok/LinkedIn, no requieren tocar código:
 
 **Meta (Facebook + Instagram)**
 1. En [developers.facebook.com](https://developers.facebook.com), la app debe estar en modo **Live**, no en Desarrollo. Mientras esté en Desarrollo, solo los usuarios agregados manualmente como *Testers* pueden conectar su cuenta.
@@ -242,8 +247,14 @@ La conexión de cuentas ya no pide tokens manuales: hay un botón "Conectar con 
 1. En [developers.tiktok.com](https://developers.tiktok.com), solicitar acceso auditado al scope `video.publish` de la **Content Posting API**. Mientras no esté auditada, los videos publicados vía la app quedan como **borrador privado** en la app de TikTok (hay que abrirla y darle "Publicar" a mano) — la app ya lo detecta y avisa cuando esto pasa.
 2. Registrar `TIKTOK_REDIRECT_URI` (dominio final) en el portal de desarrolladores.
 
+**LinkedIn**
+1. En [linkedin.com/developers](https://www.linkedin.com/developers/apps), crea una app asociada a una Página de empresa de LinkedIn (lo exige el formulario, aunque el resultado final publique a nombre del perfil personal — ver nota abajo).
+2. En la pestaña **Products**, solicita **"Sign In with LinkedIn using OpenID Connect"** y **"Share on LinkedIn"** — a diferencia de Meta, ambos se aprueban al instante (self-service), no hay revisión manual que esperar.
+3. En la pestaña **Auth**, copia el **Client ID** y **Client Secret**, y registra `LINKEDIN_REDIRECT_URI` (dominio final) como "Authorized redirect URL".
+4. **Limitación de la API pública de LinkedIn (no es un bug):** con estos productos solo se puede publicar a nombre del **perfil personal** de quien conecta su cuenta — publicar como Página/Organización requiere una API distinta con partnership aprobado caso por caso por LinkedIn. Además, el access token expira a los ~60 días sin refresh token disponible en este nivel — cuando expire, basta con reconectar con un clic.
+
 **Antes de que el equipo use esto a diario**, además:
-- Desplegar el backend en un hosting con URL estable (Railway, Render, etc. — `npm start` ya está listo) y el frontend en Vercel/Netlify, y actualizar `META_REDIRECT_URI`/`TIKTOK_REDIRECT_URI`/`FRONTEND_URL` al dominio real.
+- Desplegar el backend en un hosting con URL estable (Railway, Render, etc. — `npm start` ya está listo) y el frontend en Vercel/Netlify, y actualizar `META_REDIRECT_URI`/`TIKTOK_REDIRECT_URI`/`LINKEDIN_REDIRECT_URI`/`FRONTEND_URL` al dominio real.
 - Rotar `JWT_SECRET` y la contraseña de `MONGO_URI` si vienen de una prueba local, antes de manejar cuentas reales de la empresa.
 
 ---
@@ -317,9 +328,12 @@ Recomendado por costo real (gratis, sin tarjeta): **Render** para el backend, **
    TIKTOK_CLIENT_KEY
    TIKTOK_CLIENT_SECRET
    TIKTOK_REDIRECT_URI
+   LINKEDIN_CLIENT_ID
+   LINKEDIN_CLIENT_SECRET
+   LINKEDIN_REDIRECT_URI
    SOCIAL_TOKEN_ENCRYPTION_KEY
    ```
-   Para `FRONTEND_URL`, `META_REDIRECT_URI` y `TIKTOK_REDIRECT_URI` deja el mismo valor de local por ahora — se corrigen en el paso 3.
+   Para `FRONTEND_URL`, `META_REDIRECT_URI`, `TIKTOK_REDIRECT_URI` y `LINKEDIN_REDIRECT_URI` deja el mismo valor de local por ahora — se corrigen en el paso 3.
 5. Clic en **"Create Web Service"**. Render te da una URL pública tipo `https://proyectomarketing.onrender.com`. **Guarda esa URL.**
 
 ### 2. Frontend en Vercel
@@ -331,8 +345,8 @@ Recomendado por costo real (gratis, sin tarjeta): **Render** para el backend, **
 
 ### 3. Cerrar el círculo
 1. Vuelve a Render → Environment → actualiza `FRONTEND_URL` con la URL real de Vercel del paso 2.
-2. Actualiza también `META_REDIRECT_URI` y `TIKTOK_REDIRECT_URI` cambiando `localhost:3001` por tu dominio de Render (ej. `https://proyectomarketing.onrender.com/social/meta/callback`).
-3. Registra esas mismas URLs (las de Render) como "Valid OAuth Redirect URI" en los dashboards de Meta y TikTok, reemplazando las de `localhost` que usabas en desarrollo.
+2. Actualiza también `META_REDIRECT_URI`, `TIKTOK_REDIRECT_URI` y `LINKEDIN_REDIRECT_URI` cambiando `localhost:3001` por tu dominio de Render (ej. `https://proyectomarketing.onrender.com/social/meta/callback`).
+3. Registra esas mismas URLs (las de Render) como "Valid OAuth Redirect URI" en los dashboards de Meta, TikTok y LinkedIn, reemplazando las de `localhost` que usabas en desarrollo.
 
 Con esto, cualquiera del equipo entra a la URL de Vercel, se registra y ya puede usar la herramienta — sin depender de tu laptop ni pagar hosting.
 
@@ -390,6 +404,8 @@ GET  /social/meta/callback       # callback que llama Facebook
 POST /social/meta/select-page    # cuando el usuario administra varias Páginas
 GET  /social/tiktok/connect      # devuelve la URL de login de TikTok
 GET  /social/tiktok/callback     # callback que llama TikTok
+GET  /social/linkedin/connect    # devuelve la URL de login de LinkedIn
+GET  /social/linkedin/callback   # callback que llama LinkedIn
 ```
 
 ---
@@ -404,13 +420,13 @@ GET  /social/tiktok/callback     # callback que llama TikTok
 * Autenticación de usuarios e historial compartido por todo el equipo, con estados (Borrador/Aprobado/Publicado)
 * Exportación a PDF con formato profesional
 * Modo claro/oscuro
-* Publicación real en Facebook, Instagram, TikTok (OAuth), Twitter/X y LinkedIn (manual)
+* Publicación real en Facebook, Instagram, TikTok y LinkedIn (OAuth), Twitter/X (manual)
 * Tokens de redes sociales cifrados en reposo
 
 ### Próximas Versiones
 
-* App Review de Meta y auditoría de TikTok (ver checklist arriba) para uso sin restricciones por todo el equipo
-* OAuth real para Twitter/X y LinkedIn (hoy conexión manual)
+* App Review de Meta, auditoría de TikTok y app de LinkedIn Developers pendiente de crear (ver checklist arriba) para uso sin restricciones por todo el equipo
+* OAuth real para Twitter/X (hoy conexión manual)
 * Perfil de marca (tono/público) aplicado automático a cada generación
 * Análisis de tendencias en tiempo real
 * Métricas y reportes avanzados

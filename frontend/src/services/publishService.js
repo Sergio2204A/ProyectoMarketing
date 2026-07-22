@@ -25,6 +25,11 @@ export const getTikTokConnectUrlAPI = async () => {
   return response.data;
 };
 
+export const getLinkedInConnectUrlAPI = async () => {
+  const response = await axios.get(`${API_URL}/social/linkedin/connect`, { headers: authHeader() });
+  return response.data;
+};
+
 export const getMetaPendingPagesAPI = async () => {
   const response = await axios.get(`${API_URL}/social/meta/pending-pages`, { headers: authHeader() });
   return response.data;

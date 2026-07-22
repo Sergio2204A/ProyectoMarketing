@@ -88,6 +88,21 @@ export const generateImageOpenAIAPI = async (prompt, imageFile, size, quality) =
   return response.data;
 };
 
+export const getOpenAiKeyStatusAPI = async () => {
+  const response = await axios.get(`${API_URL}/account/openai-key`, { headers: authHeader() });
+  return response.data;
+};
+
+export const saveOpenAiKeyAPI = async (apiKey) => {
+  const response = await axios.post(`${API_URL}/account/openai-key`, { apiKey }, { headers: authHeader() });
+  return response.data;
+};
+
+export const deleteOpenAiKeyAPI = async () => {
+  const response = await axios.delete(`${API_URL}/account/openai-key`, { headers: authHeader() });
+  return response.data;
+};
+
 export const videoScriptChatAPI = async (messages, context) => {
   const response = await axios.post(`${API_URL}/video/chat`, { messages, context }, { headers: authHeader() });
   return response.data;

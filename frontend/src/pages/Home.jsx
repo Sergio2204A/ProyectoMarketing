@@ -13,6 +13,7 @@ import {
   disconnectSocialAPI,
   getMetaConnectUrlAPI,
   getTikTokConnectUrlAPI,
+  getLinkedInConnectUrlAPI,
   getMetaPendingPagesAPI,
   selectMetaPageAPI,
 } from "../services/publishService";
@@ -38,9 +39,17 @@ import {
   updateOutputAPI,
   updateVideoUrlAPI,
   saveGenerationAPI,
+  getOpenAiKeyStatusAPI,
+  saveOpenAiKeyAPI,
+  deleteOpenAiKeyAPI,
 } from "../services/campaignService";
 
 const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario", video: "Video Script" };
+const QUALITY_OPTIONS = [
+  { value: "low", label: "Borrador" },
+  { value: "medium", label: "Estándar" },
+  { value: "high", label: "Premium" },
+];
 const STATUS_CONFIG = {
   draft: { label: "Borrador", color: "#948c81", bg: "rgba(148,140,129,0.14)" },
   approved: { label: "Aprobado", color: "#3d8bd6", bg: "rgba(61,139,214,0.14)" },
@@ -141,6 +150,14 @@ function Home() {
   const [studioFilePreview, setStudioFilePreview] = useState(null);
   const [studioLoading, setStudioLoading] = useState(false);
   const [studioSize, setStudioSize] = useState("1024x1024");
+  const [studioQuality, setStudioQuality] = useState("medium");
+  const [personalKeyStatus, setPersonalKeyStatus] = useState({ hasKey: false, preview: null });
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [pendingGeneration, setPendingGeneration] = useState(null);
+  const [pendingQualitySelect, setPendingQualitySelect] = useState(null);
+  const [showKeyInstructions, setShowKeyInstructions] = useState(false);
   const studioFileRef = useRef(null);
   const studioBottomRef = useRef(null);
 
@@ -177,6 +194,17 @@ function Home() {
   useEffect(() => { loadHistory(); loadUpcoming(); }, [loadHistory, loadUpcoming]);
   useEffect(() => { if (activeTab === "social") loadSocialCreds(); }, [activeTab]);
 
+  const loadPersonalKeyStatus = useCallback(async () => {
+    try {
+      const data = await getOpenAiKeyStatusAPI();
+      setPersonalKeyStatus({ hasKey: data.hasKey, preview: data.preview });
+    } catch (err) {
+      console.error("Error al consultar la API key personal:", err);
+    }
+  }, []);
+
+  useEffect(() => { if (activeTab === "imagestudio") loadPersonalKeyStatus(); }, [activeTab, loadPersonalKeyStatus]);
+
   /* ── Retorno del OAuth de Meta/TikTok (el backend redirige aquí con ?social=...) ── */
   useEffect(() => {
     const social = new URLSearchParams(window.location.search).get("social");
@@ -190,6 +218,8 @@ function Home() {
       meta_error: ["No se pudo conectar con Meta. Intenta de nuevo.", "error"],
       tiktok_connected: ["TikTok conectado ✓", "success"],
       tiktok_error: ["No se pudo conectar con TikTok. Intenta de nuevo.", "error"],
+      linkedin_connected: ["LinkedIn conectado ✓", "success"],
+      linkedin_error: ["No se pudo conectar con LinkedIn. Intenta de nuevo.", "error"],
     };
     const [message, type] = MESSAGES[social] || ["Listo", "info"];
     showToast(message, type);
@@ -1317,26 +1347,90 @@ function Home() {
     reader.readAsDataURL(file);
   };
 
-  const handleStudioSend = async () => {
-    if (!studioPrompt.trim() && !studioFile) return;
-    const prompt = studioPrompt.trim() || "Genera una imagen de marketing profesional";
+  const sendImageGeneration = async ({ prompt, file, size, quality, referencePreview }) => {
     setStudioLoading(true);
-    const pendingMsg = { id: Date.now(), prompt, referencePreview: studioFilePreview, result: null, error: null };
+    const pendingMsg = { id: Date.now(), prompt, referencePreview: referencePreview || null, result: null, error: null };
     setStudioMessages((prev) => [...prev, pendingMsg]);
-    setStudioPrompt("");
-    setStudioFile(null);
-    setStudioFilePreview(null);
     setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     try {
-      const data = await generateImageOpenAIAPI(prompt, studioFile, studioSize);
+      const data = await generateImageOpenAIAPI(prompt, file, size, quality);
       const dataUrl = `data:${data.mimeType};base64,${data.b64}`;
       setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, result: dataUrl } : m));
     } catch (err) {
-      const msg = err.response?.data?.message || "Error al generar la imagen";
-      setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, error: msg } : m));
+      if (err.response?.data?.code === "PERSONAL_KEY_REQUIRED") {
+        setStudioMessages((prev) => prev.filter((m) => m.id !== pendingMsg.id));
+        setPendingGeneration({ prompt, file, size, quality, referencePreview });
+        setShowKeyModal(true);
+      } else {
+        const msg = err.response?.data?.message || "Error al generar la imagen";
+        setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, error: msg } : m));
+      }
     } finally {
       setStudioLoading(false);
       setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  };
+
+  const handleStudioSend = async () => {
+    if (!studioPrompt.trim() && !studioFile) return;
+    const prompt = studioPrompt.trim() || "Genera una imagen de marketing profesional";
+    const file = studioFile;
+    const referencePreview = studioFilePreview;
+    setStudioPrompt("");
+    setStudioFile(null);
+    setStudioFilePreview(null);
+    await sendImageGeneration({ prompt, file, size: studioSize, quality: studioQuality, referencePreview });
+  };
+
+  const handleQualitySelect = (value) => {
+    if (value === "low" || personalKeyStatus.hasKey) {
+      setStudioQuality(value);
+      return;
+    }
+    setPendingQualitySelect(value);
+    setShowKeyModal(true);
+  };
+
+  const closeKeyModal = () => {
+    setShowKeyModal(false);
+    setPendingGeneration(null);
+    setPendingQualitySelect(null);
+    setKeyInput("");
+    setShowKeyInstructions(false);
+  };
+
+  const handleSavePersonalKey = async () => {
+    if (!keyInput.trim()) return;
+    setSavingKey(true);
+    try {
+      await saveOpenAiKeyAPI(keyInput.trim());
+      setKeyInput("");
+      setShowKeyModal(false);
+      await loadPersonalKeyStatus();
+      if (pendingQualitySelect) {
+        setStudioQuality(pendingQualitySelect);
+        setPendingQualitySelect(null);
+      }
+      if (pendingGeneration) {
+        const gen = pendingGeneration;
+        setPendingGeneration(null);
+        await sendImageGeneration(gen);
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || "Error al guardar la API key", "error");
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const handleRemovePersonalKey = async () => {
+    try {
+      await deleteOpenAiKeyAPI();
+      await loadPersonalKeyStatus();
+      if (studioQuality !== "low") setStudioQuality("low");
+      showToast("API key eliminada", "success");
+    } catch (err) {
+      showToast("Error al eliminar la API key", "error");
     }
   };
 
@@ -1373,6 +1467,40 @@ function Home() {
               </button>
             )}
           </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border-color)" }}>
+          <label style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Calidad</label>
+          <div style={{ display: "inline-flex", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", overflow: "hidden" }}>
+            {QUALITY_OPTIONS.map((opt, i) => {
+              const active = studioQuality === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => handleQualitySelect(opt.value)}
+                  title={opt.value === "low" ? "Gratis, usa la cuenta del proyecto" : "Requiere tu propia API key de OpenAI"}
+                  style={{
+                    padding: "0.45rem 1rem",
+                    border: "none",
+                    borderLeft: i === 0 ? "none" : "1px solid var(--border-color)",
+                    background: active ? "var(--accent-subtle)" : "transparent",
+                    color: active ? "var(--accent-secondary)" : "var(--text-soft)",
+                    fontWeight: active ? "700" : "500",
+                    fontSize: "0.8rem",
+                    cursor: "pointer",
+                  }}>
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {studioQuality !== "low" && personalKeyStatus.hasKey && (
+            <button
+              onClick={() => setShowKeyModal(true)}
+              style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: "0.75rem", textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+              Cambiar API key ({personalKeyStatus.preview})
+            </button>
+          )}
         </div>
       </div>
 
@@ -1484,6 +1612,77 @@ function Home() {
           Enter para enviar · Shift+Enter para nueva línea · 📎 adjunta logo o imagen de referencia
         </p>
       </div>
+
+      {showKeyModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}
+          onClick={closeKeyModal}>
+          <div
+            className="section-card"
+            style={{ maxWidth: "480px", width: "100%" }}
+            onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 0.5rem", color: "var(--text-active)" }}>
+              Genera imágenes de mayor calidad
+            </h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: "1.6", marginBottom: "0.75rem" }}>
+              Ingresa tu API de confianza y desbloquea <strong>Estándar</strong> y <strong>Premium</strong> — mejores resultados, con tu propia cuenta y a tu propio ritmo. Borrador sigue siendo gratis para todos. Tu key se guarda cifrada y nunca se vuelve a mostrar completa.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowKeyInstructions((v) => !v)}
+              style={{ alignSelf: "flex-start", background: "none", border: "none", color: "var(--accent-secondary)", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", textDecoration: "underline", padding: 0, marginBottom: "0.75rem", display: "block" }}
+            >
+              {showKeyInstructions ? "Ocultar instrucciones" : "¿Cómo consigo mi API key? →"}
+            </button>
+            {showKeyInstructions && (
+              <ol style={{ margin: "0 0 1rem", paddingLeft: "1.2rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                <li style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>
+                  Entra a <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" style={{ color: "var(--accent-secondary)" }}>platform.openai.com/api-keys</a> e inicia sesión (puede ser con tu cuenta de Google — esto solo abre el panel, ojo que es distinto a tu ChatGPT).
+                </li>
+                <li style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>
+                  Si es tu primera vez, ve a <strong>Settings → Billing</strong> y agrega un método de pago (la API se cobra por uso, no por suscripción de ChatGPT).
+                </li>
+                <li style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>
+                  Ve a <strong>API keys</strong> en el menú y haz clic en <strong>"Create new secret key"</strong>.
+                </li>
+                <li style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>
+                  Ponle un nombre (ej. "Marketing AI") y dale <strong>Create</strong>.
+                </li>
+                <li style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>
+                  Copia la key que empieza con <strong>sk-...</strong> (solo se muestra una vez) y pégala abajo.
+                </li>
+              </ol>
+            )}
+            <input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder="sk-..."
+              style={{ width: "100%", boxSizing: "border-box", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.8rem", color: "var(--text-main)", fontSize: "0.85rem", outline: "none", marginBottom: "1rem" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+              <div>
+                {personalKeyStatus.hasKey && (
+                  <button onClick={handleRemovePersonalKey}
+                    style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.78rem", textDecoration: "underline" }}>
+                    Quitar mi API key
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: "0.6rem" }}>
+                <button onClick={closeKeyModal}
+                  style={{ background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.5rem 1rem", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85rem" }}>
+                  Cancelar
+                </button>
+                <button className="btn-primary" onClick={handleSavePersonalKey} disabled={savingKey || !keyInput.trim()}
+                  style={{ padding: "0.5rem 1rem", fontSize: "0.85rem" }}>
+                  {savingKey ? "Guardando..." : pendingGeneration ? "Guardar y generar" : pendingQualitySelect ? "Guardar y usar" : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -2546,6 +2745,17 @@ function Home() {
     }
   };
 
+  const handleLinkedInConnect = async () => {
+    setSocialConnecting("linkedin");
+    try {
+      const { url } = await getLinkedInConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      showToast("No se pudo iniciar la conexión con LinkedIn", "error");
+      setSocialConnecting(null);
+    }
+  };
+
   const handleSelectMetaPage = async (pageId) => {
     setMetaSelectingPage(true);
     try {
@@ -2587,6 +2797,9 @@ function Home() {
     </svg>
   );
 
+  const OAUTH_CONNECT_HANDLERS = { meta: handleMetaConnect, tiktok: handleTikTokConnect, linkedin: handleLinkedInConnect };
+  const OAUTH_LABELS = { meta: "Meta", tiktok: "TikTok", linkedin: "LinkedIn" };
+
   const SOCIAL_PLATFORMS = [
     { id: "facebook", label: "Facebook", logo: FB_LOGO,
       badge: null, oauth: "meta",
@@ -2610,12 +2823,9 @@ function Home() {
       ],
       instructions: ["Ve a developer.twitter.com y crea un proyecto + app", "En 'Settings', activa permisos de Read and Write", "En 'Keys and Tokens' genera: API Key, API Secret, Access Token y Access Token Secret", "Asegúrate de que el Access Token tenga permisos de escritura (no solo lectura)", "Guarda los 4 tokens — todos son necesarios para firmar los tweets con OAuth 1.0a"] },
     { id: "linkedin", label: "LinkedIn", logo: LI_LOGO,
-      badge: null,
-      fields: [
-        { key: "accessToken", label: "Access Token OAuth 2.0", placeholder: "AQXxxxxxxxxxxxxxxxxx...", type: "text" },
-        { key: "pageId", label: "Author URN", placeholder: "Ej: urn:li:person:ABC123XYZ", type: "text" },
-      ],
-      instructions: ["Ve a linkedin.com/developers y crea una app asociada a una Página de empresa", "Solicita los productos 'Share on LinkedIn' y 'Sign In with LinkedIn'", "En OAuth 2.0 tools genera un Access Token con scopes: w_member_social, r_liteprofile", "El Author URN tiene el formato urn:li:person:XXXXXXXX — lo obtienes de GET /v2/me", "Los tokens de LinkedIn expiran cada 60 días — recuerda renovarlos"] },
+      badge: null, oauth: "linkedin",
+      fields: [],
+      note: "Publica a nombre de tu perfil personal de LinkedIn (la API pública no permite publicar como Página de empresa sin aprobación especial de LinkedIn). El acceso expira cada ~60 días — cuando pase, solo hay que reconectar con un clic." },
   ];
 
   const renderSocialMedia = () => (
@@ -2678,12 +2888,12 @@ function Home() {
                     </button>
                   ) : platform.oauth ? (
                     <button
-                      onClick={platform.oauth === "meta" ? handleMetaConnect : handleTikTokConnect}
+                      onClick={OAUTH_CONNECT_HANDLERS[platform.oauth]}
                       disabled={isConnecting}
                       className="btn-primary"
                       style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
                     >
-                      {isConnecting ? "Redirigiendo..." : `Conectar con ${platform.oauth === "meta" ? "Meta" : "TikTok"}`}
+                      {isConnecting ? "Redirigiendo..." : `Conectar con ${OAUTH_LABELS[platform.oauth]}`}
                     </button>
                   ) : (
                     <button

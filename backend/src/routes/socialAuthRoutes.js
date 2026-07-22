@@ -8,6 +8,8 @@ const {
   selectMetaPage,
   getTikTokConnectUrl,
   tiktokCallback,
+  getLinkedInConnectUrl,
+  linkedinCallback,
 } = require("../controllers/socialAuthController");
 
 router.get("/meta/connect", protect, getMetaConnectUrl);
@@ -17,5 +19,8 @@ router.post("/meta/select-page", protect, selectMetaPage);
 
 router.get("/tiktok/connect", protect, getTikTokConnectUrl);
 router.get("/tiktok/callback", tiktokCallback); // llamado por TikTok, sin header de Authorization
+
+router.get("/linkedin/connect", protect, getLinkedInConnectUrl);
+router.get("/linkedin/callback", linkedinCallback); // llamado por LinkedIn, sin header de Authorization
 
 module.exports = router;

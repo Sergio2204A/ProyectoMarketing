@@ -14,6 +14,7 @@ const publishRoutes = require("./routes/publishRoutes");
 const videoRoutes = require("./routes/videoRoutes");
 const imageRoutes = require("./routes/imageRoutes");
 const socialAuthRoutes = require("./routes/socialAuthRoutes");
+const accountRoutes = require("./routes/accountRoutes");
 
 const connectDB = require("./db");
 const { startReminderScheduler } = require("./services/reminderScheduler");
@@ -45,6 +46,7 @@ app.use("/publish", publishRoutes);
 app.use("/video", videoRoutes);
 app.use("/image", imageRoutes);
 app.use("/social", socialAuthRoutes);
+app.use("/account", accountRoutes);
 
 app.use((err, req, res, next) => {
   console.error("Error no controlado:", err);

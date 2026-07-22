@@ -26,6 +26,11 @@ const UserSchema = new mongoose.Schema(
       default: {},
       select: false,
     },
+    personalApiKeys: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+      select: false,
+    },
     resetPasswordToken: {
       type: String,
       select: false,

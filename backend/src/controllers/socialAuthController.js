@@ -254,6 +254,73 @@ async function ensureFreshTikTokToken(user) {
   return updated;
 }
 
+/* ═══════════════ LINKEDIN ═══════════════ */
+
+const getLinkedInConnectUrl = async (req, res) => {
+  const state = signState(req.user._id.toString());
+  const params = new URLSearchParams({
+    client_id: process.env.LINKEDIN_CLIENT_ID,
+    redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
+    state,
+    scope: "openid profile email w_member_social",
+    response_type: "code",
+  });
+  res.json({ success: true, url: `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}` });
+};
+
+const linkedinCallback = async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) return redirectWithStatus(res, "linkedin_error");
+
+  let userId;
+  try {
+    userId = verifyState(state);
+  } catch {
+    return redirectWithStatus(res, "linkedin_error");
+  }
+
+  try {
+    const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
+        client_id: process.env.LINKEDIN_CLIENT_ID,
+        client_secret: process.env.LINKEDIN_CLIENT_SECRET,
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || tokenData.error) {
+      throw new Error(tokenData.error_description || tokenData.error || "Error al obtener el token de LinkedIn");
+    }
+
+    const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profileData = await profileRes.json();
+    if (!profileRes.ok) throw new Error("Error al obtener el perfil de LinkedIn");
+
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        "socialTokens.linkedin": encrypt({
+          pageId: `urn:li:person:${profileData.sub}`,
+          pageName: profileData.name,
+          accessToken: tokenData.access_token,
+          accessTokenExpiresAt: Date.now() + tokenData.expires_in * 1000,
+        }),
+      },
+    });
+
+    return redirectWithStatus(res, "linkedin_connected");
+  } catch (err) {
+    console.error("Error en linkedinCallback:", err.message);
+    return redirectWithStatus(res, "linkedin_error");
+  }
+};
+
 module.exports = {
   getMetaConnectUrl,
   metaCallback,
@@ -262,4 +329,6 @@ module.exports = {
   getTikTokConnectUrl,
   tiktokCallback,
   ensureFreshTikTokToken,
+  getLinkedInConnectUrl,
+  linkedinCallback,
 };
