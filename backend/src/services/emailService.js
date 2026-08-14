@@ -59,4 +59,30 @@ async function sendCalendarReminderEmail(to, dayItem) {
   });
 }
 
-module.exports = { sendPasswordResetEmail, sendCalendarReminderEmail };
+async function sendAutoPublishFailedEmail(to, { topic, platform, reason }) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+    throw new Error("Falta configurar EMAIL_USER y EMAIL_APP_PASSWORD en el archivo .env del backend.");
+  }
+
+  await transporter.sendMail({
+    from: `"Marketing AI" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: `No se pudo auto-publicar: ${topic} — Marketing AI`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1a1a1a;">⚠️ No se pudo publicar automáticamente</h2>
+        <p style="color: #555; line-height: 1.6;">
+          Tu calendario tenía programado publicar en <strong>${platform}</strong>:
+        </p>
+        <p style="color: #1a1a1a; font-weight: bold; margin: 16px 0 4px;">${topic}</p>
+        <p style="color: #555; line-height: 1.6;"><strong>Motivo:</strong> ${reason}</p>
+        <p style="color: #999; font-size: 13px; line-height: 1.5;">
+          Vas a seguir viendo este aviso solo una vez por publicación — el sistema va a seguir intentando
+          publicarla automáticamente durante las próximas 24 horas por si resuelves el problema.
+        </p>
+      </div>
+    `,
+  });
+}
+
+module.exports = { sendPasswordResetEmail, sendCalendarReminderEmail, sendAutoPublishFailedEmail };

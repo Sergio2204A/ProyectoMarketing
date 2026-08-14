@@ -40,6 +40,8 @@ const generateCalendar = async (req, res) => {
     calendarData.forEach((item) => {
       item.scheduledDate = getNextDateForWeekday(item.day, today);
       item.reminderSent = false;
+      item.autoPublished = false;
+      item.autoPublishFailedNotified = false;
     });
 
     await Generation.create({
