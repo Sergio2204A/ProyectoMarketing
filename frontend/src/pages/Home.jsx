@@ -1348,41 +1348,10 @@ function Home() {
   };
 
   const sendImageGeneration = async ({ prompt, file, size, quality, referencePreview }) => {
-    if (quality === "low" && file) {
-      setStudioMessages((prev) => [...prev, {
-        id: Date.now(), prompt, referencePreview, result: null,
-        error: "Baja no soporta imagen de referencia (logo/foto) — sube a Media o Premium para editar con tu propia imagen.",
-      }]);
-      return;
-    }
-
     setStudioLoading(true);
     const pendingMsg = { id: Date.now(), prompt, referencePreview: referencePreview || null, result: null, error: null };
     setStudioMessages((prev) => [...prev, pendingMsg]);
     setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-
-    if (quality === "low") {
-      /* Baja: Pollinations.ai, gratis y sin backend — mismo motor que ya usa el botón rápido de campañas.
-         Se trae como blob y se valida antes de mostrarla, porque Pollinations a veces responde con un
-         error (rate limit, prompt bloqueado) en vez de una imagen, y un <img src> roto no avisa nada. */
-      const [w, h] = (size || "1024x1024").split("x").map(Number);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&model=flux&seed=${Date.now()}`;
-      try {
-        const res = await fetch(url);
-        const blob = await res.blob();
-        if (!res.ok || !blob.type.startsWith("image/")) {
-          throw new Error("Pollinations no pudo generar la imagen (puede estar saturado). Intenta de nuevo en unos segundos.");
-        }
-        const objectUrl = URL.createObjectURL(blob);
-        setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, result: objectUrl } : m));
-      } catch (err) {
-        setStudioMessages((prev) => prev.map((m) => m.id === pendingMsg.id ? { ...m, error: err.message || "Error al generar la imagen. Intenta de nuevo." } : m));
-      } finally {
-        setStudioLoading(false);
-        setTimeout(() => studioBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-      }
-      return;
-    }
 
     try {
       const data = await generateImageOpenAIAPI(prompt, file, size, quality);
@@ -1466,23 +1435,11 @@ function Home() {
     }
   };
 
-  const handleStudioDownload = async (resultUrl, idx) => {
+  const handleStudioDownload = (dataUrl, idx) => {
     const a = document.createElement("a");
+    a.href = dataUrl;
     a.download = `imagen-marketing-${idx + 1}-${Date.now()}.png`;
-    if (resultUrl.startsWith("data:") || resultUrl.startsWith("blob:")) {
-      a.href = resultUrl;
-      a.click();
-      return;
-    }
-    /* URL externa: hay que traerla como blob, el atributo download no aplica cross-origin */
-    try {
-      const res = await fetch(resultUrl);
-      const blob = await res.blob();
-      a.href = URL.createObjectURL(blob);
-      a.click();
-    } catch {
-      showToast("Error al descargar la imagen", "error");
-    }
+    a.click();
   };
 
   const renderImageStudio = () => (
