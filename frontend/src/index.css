@@ -351,6 +351,8 @@ body {
   transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
 }
 .metric-card:hover { border-color: rgba(201,105,43,0.25); }
+.metric-card-link { cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease; }
+.metric-card-link:hover { transform: translateY(-2px); border-color: rgba(201,105,43,0.4); }
 .metric-icon {
   width: 36px;
   height: 36px;

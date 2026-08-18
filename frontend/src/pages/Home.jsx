@@ -702,25 +702,25 @@ function Home() {
         </div>
 
         <div className="metrics-grid">
-          <div className="metric-card">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("all"); setActiveTab("history"); }} title="Ver todo el historial">
             <div className="metric-icon" style={{ background: "rgba(201,105,43,0.12)" }}>📊</div>
             <div className="metric-value">{history.length}</div>
             <div className="metric-label">Total generado</div>
             <div className="metric-sub">Creaciones acumuladas</div>
           </div>
-          <div className="metric-card">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("campaign"); setActiveTab("history"); }} title="Ver solo campañas">
             <div className="metric-icon" style={{ background: "rgba(180,90,30,0.12)" }}>⚡</div>
             <div className="metric-value">{totalCampaigns}</div>
             <div className="metric-label">Campañas</div>
             <div className="metric-sub">Estrategias creadas</div>
           </div>
-          <div className="metric-card">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("text"); setActiveTab("history"); }} title="Ver solo copys y hashtags">
             <div className="metric-icon" style={{ background: "rgba(150,100,40,0.12)" }}>✍️</div>
             <div className="metric-value">{totalCopys + totalHashtags}</div>
             <div className="metric-label">Copys & Hashtags</div>
             <div className="metric-sub">Textos generados</div>
           </div>
-          <div className="metric-card">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("favorites"); setActiveTab("history"); }} title="Ver solo favoritos">
             <div className="metric-icon" style={{ background: "rgba(250,200,50,0.1)" }}>⭐</div>
             <div className="metric-value">{totalFavs}</div>
             <div className="metric-label">Favoritos</div>
@@ -2228,12 +2228,25 @@ function Home() {
     const filtered = history.filter((item) => {
       const matchesFilter = historyFilter === "all" ? true
         : historyFilter === "favorites" ? item.isFavorite
+        : historyFilter === "text" ? (item.type === "copy" || item.type === "hashtag")
         : historyFilter.startsWith("status:") ? (item.status || "draft") === historyFilter.replace("status:", "")
         : item.type === historyFilter;
       const q = historySearch.toLowerCase();
       const matchesSearch = !q || (item.input?.product || "").toLowerCase().includes(q) || (typeof item.output === "string" && item.output.toLowerCase().includes(q));
       return matchesFilter && matchesSearch;
     });
+
+    /* Con "Todos" seleccionado se divide por tipo (secciones con encabezado) en vez de mezclar
+       todo en una sola bandeja — con cualquier otro filtro ya es un solo tipo, se muestra plano. */
+    const GROUP_ORDER = ["campaign", "copy", "hashtag", "calendar", "video"];
+    const GROUP_LABELS = { campaign: "⚡ Campañas", copy: "✍️ Copys", hashtag: "# Hashtags", calendar: "📅 Calendarios", video: "🎬 Video Scripts" };
+    const groupedRows = historyFilter !== "all"
+      ? filtered.map((item) => ({ kind: "item", item }))
+      : GROUP_ORDER.flatMap((type) => {
+          const items = filtered.filter((it) => it.type === type);
+          if (items.length === 0) return [];
+          return [{ kind: "header", type, count: items.length }, ...items.map((item) => ({ kind: "item", item }))];
+        });
     const filterBtnStyle = (id) => ({
       padding: "0.35rem 0.9rem", borderRadius: "50px", border: "1px solid", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", transition: "all 0.2s",
       borderColor: historyFilter === id ? "var(--accent-primary)" : "var(--border-color)",
@@ -2279,7 +2292,18 @@ function Home() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {filtered.map((item) => (
+            {groupedRows.map((row) => {
+              if (row.kind === "header") {
+                return (
+                  <div key={`group-${row.type}`} style={{ display: "flex", alignItems: "center", gap: "0.6rem", margin: "0.5rem 0 -0.25rem" }}>
+                    <h4 style={{ fontSize: "0.85rem", fontWeight: "800", color: "var(--text-active)", margin: 0, whiteSpace: "nowrap" }}>{GROUP_LABELS[row.type]}</h4>
+                    <span style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--accent-secondary)", background: "var(--accent-subtle)", padding: "0.1rem 0.55rem", borderRadius: "999px" }}>{row.count}</span>
+                    <div style={{ flex: 1, height: "1px", background: "var(--border-color)" }} />
+                  </div>
+                );
+              }
+              const item = row.item;
+              return (
               <div key={item._id} className="history-card" style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.35)" : "var(--border-color)"}`, padding: "1.25rem 1.5rem" }}>
                 <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", justifyContent: "flex-end", marginBottom: "0.75rem", flexWrap: "wrap" }}>
                   {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
@@ -2400,7 +2424,8 @@ function Home() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
