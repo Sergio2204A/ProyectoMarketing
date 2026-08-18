@@ -2221,7 +2221,7 @@ function Home() {
     const FILTERS = [
       { id: "all", label: "Todos" }, { id: "favorites", label: "⭐ Favoritos" },
       { id: "campaign", label: "Campañas" }, { id: "copy", label: "Copys" },
-      { id: "hashtag", label: "Hashtags" }, { id: "calendar", label: "Calendarios" },
+      { id: "hashtag", label: "Hashtags" },
       { id: "video", label: "🎬 Videos" },
       { id: "status:draft", label: "Borrador" }, { id: "status:approved", label: "Aprobado" }, { id: "status:published", label: "Publicado" },
     ];
@@ -2238,8 +2238,8 @@ function Home() {
 
     /* Con "Todos" seleccionado se divide por tipo (secciones con encabezado) en vez de mezclar
        todo en una sola bandeja — con cualquier otro filtro ya es un solo tipo, se muestra plano. */
-    const GROUP_ORDER = ["campaign", "copy", "hashtag", "calendar", "video"];
-    const GROUP_LABELS = { campaign: "⚡ Campañas", copy: "✍️ Copys", hashtag: "# Hashtags", calendar: "📅 Calendarios", video: "🎬 Video Scripts" };
+    const GROUP_ORDER = ["campaign", "copy", "hashtag", "video"];
+    const GROUP_LABELS = { campaign: "⚡ Campañas", copy: "✍️ Copys", hashtag: "# Hashtags", video: "🎬 Video Scripts" };
     const groupedRows = historyFilter !== "all"
       ? filtered.map((item) => ({ kind: "item", item }))
       : GROUP_ORDER.flatMap((type) => {
