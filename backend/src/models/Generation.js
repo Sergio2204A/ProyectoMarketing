@@ -37,6 +37,29 @@ const GenerationSchema = new mongoose.Schema(
       enum: ["draft", "approved", "published"],
       default: "draft",
     },
+    /* Agendar publicación de un item del historial: se elige fecha/hora y una o varias
+       redes, y el cron de historyPublishScheduler.js publica solo cuando llega la hora,
+       usando la cuenta social que el usuario ya tenga conectada. */
+    scheduledPublish: {
+      type: new mongoose.Schema(
+        {
+          date: { type: Date, required: true },
+          platforms: [{ type: String }],
+          status: { type: String, enum: ["pending", "done"], default: "pending" },
+          results: [
+            {
+              platform: String,
+              status: { type: String, enum: ["pending", "success", "failed"], default: "pending" },
+              error: String,
+              publishedAt: Date,
+              notifiedFailure: { type: Boolean, default: false },
+            },
+          ],
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
   },
   {
     timestamps: true,

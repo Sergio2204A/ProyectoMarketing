@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, updateStatus, saveGeneration } = require("../controllers/historyController");
+const { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, updateStatus, saveGeneration, schedulePublish, cancelSchedule } = require("../controllers/historyController");
 const { protect } = require("../middleware/authMiddleware");
 
 router.get("/", protect, getHistory);
@@ -10,6 +10,8 @@ router.patch("/:id/image", protect, updateImageUrl);
 router.patch("/:id/video", protect, updateVideoUrl);
 router.patch("/:id/output", protect, updateOutput);
 router.patch("/:id/status", protect, updateStatus);
+router.patch("/:id/schedule", protect, schedulePublish);
+router.delete("/:id/schedule", protect, cancelSchedule);
 router.delete("/clear", protect, clearHistory);
 router.delete("/:id", protect, deleteHistoryItem);
 

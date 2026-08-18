@@ -123,6 +123,16 @@ export const saveGenerationAPI = async (type, input, output) => {
   return response.data;
 };
 
+export const schedulePublishAPI = async (id, date, platforms) => {
+  const response = await axios.patch(`${API_URL}/history/${id}/schedule`, { date, platforms }, { headers: authHeader() });
+  return response.data;
+};
+
+export const cancelSchedulePublishAPI = async (id) => {
+  const response = await axios.delete(`${API_URL}/history/${id}/schedule`, { headers: authHeader() });
+  return response.data;
+};
+
 export const generateRealVideoAPI = async (data) => {
   const response = await axios.post(`${API_URL}/video/real`, data, { headers: authHeader() });
   return response.data;

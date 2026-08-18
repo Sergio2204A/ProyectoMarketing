@@ -19,10 +19,12 @@ const accountRoutes = require("./routes/accountRoutes");
 const connectDB = require("./db");
 const { startReminderScheduler } = require("./services/reminderScheduler");
 const { startAutoPublishScheduler } = require("./services/autoPublishScheduler");
+const { startHistoryPublishScheduler } = require("./services/historyPublishScheduler");
 
 connectDB();
 startReminderScheduler();
 startAutoPublishScheduler();
+startHistoryPublishScheduler();
 
 const app = express();
 

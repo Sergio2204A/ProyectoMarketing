@@ -124,6 +124,57 @@ const updateStatus = async (req, res) => {
   }
 };
 
+const SCHEDULABLE_PLATFORMS = ["facebook", "instagram", "tiktok", "twitter", "linkedin"];
+
+/* Agenda la publicación de un item ya creado (borrador o no) en una o varias redes. El cron
+   de historyPublishScheduler.js revisa cada 15 min y publica cuando llega la fecha, usando la
+   cuenta social que el usuario ya tenga conectada — no valida acá si está conectada, eso lo
+   resuelve el cron al momento de publicar (y avisa por email si falla). */
+const schedulePublish = async (req, res) => {
+  try {
+    const { date, platforms } = req.body;
+
+    if (!date || isNaN(new Date(date).getTime())) {
+      return res.status(400).json({ success: false, message: "Fecha no válida" });
+    }
+    if (new Date(date) <= new Date()) {
+      return res.status(400).json({ success: false, message: "La fecha debe ser en el futuro" });
+    }
+    if (!Array.isArray(platforms) || platforms.length === 0 || !platforms.every((p) => SCHEDULABLE_PLATFORMS.includes(p))) {
+      return res.status(400).json({ success: false, message: "Elige al menos una red social válida" });
+    }
+
+    const generation = await Generation.findById(req.params.id);
+    if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
+
+    generation.scheduledPublish = {
+      date: new Date(date),
+      platforms,
+      status: "pending",
+      results: platforms.map((platform) => ({ platform, status: "pending" })),
+    };
+    await generation.save();
+
+    res.json({ success: true, scheduledPublish: generation.scheduledPublish });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const cancelSchedule = async (req, res) => {
+  try {
+    const generation = await Generation.findById(req.params.id);
+    if (!generation) return res.status(404).json({ success: false, message: "No encontrado" });
+
+    generation.scheduledPublish = null;
+    await generation.save();
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const saveGeneration = async (req, res) => {
   try {
     const { type, input, output } = req.body;
@@ -134,4 +185,4 @@ const saveGeneration = async (req, res) => {
   }
 };
 
-module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, updateStatus, saveGeneration };
+module.exports = { getHistory, deleteHistoryItem, clearHistory, toggleFavorite, updateImageUrl, updateVideoUrl, updateOutput, updateStatus, saveGeneration, schedulePublish, cancelSchedule };

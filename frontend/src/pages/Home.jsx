@@ -42,9 +42,12 @@ import {
   getOpenAiKeyStatusAPI,
   saveOpenAiKeyAPI,
   deleteOpenAiKeyAPI,
+  schedulePublishAPI,
+  cancelSchedulePublishAPI,
 } from "../services/campaignService";
 
 const TYPE_LABELS = { campaign: "Campaña", copy: "Copy", hashtag: "Hashtags", calendar: "Calendario", video: "Video Script" };
+const PLATFORM_LABELS = { facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", twitter: "Twitter / X", linkedin: "LinkedIn" };
 const QUALITY_OPTIONS = [
   { value: "low", label: "Baja" },
   { value: "medium", label: "Media" },
@@ -114,6 +117,12 @@ function Home() {
   const [detailVideoLinkInput, setDetailVideoLinkInput] = useState("");
   const detailVideoFileRef = useRef(null);
   const [publishModalOpen, setPublishModalOpen] = useState(null);
+  const [scheduleModal, setScheduleModal] = useState(null);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [schedulePlatforms, setSchedulePlatforms] = useState([]);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
   const [socialCreds, setSocialCreds] = useState({ facebook: { connected: false }, instagram: { connected: false }, tiktok: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } });
   const [socialLoadingCreds, setSocialLoadingCreds] = useState(false);
   const [socialOpenForm, setSocialOpenForm] = useState(null);
@@ -280,6 +289,64 @@ function Home() {
       await updateStatusAPI(id, status);
       setHistory((prev) => prev.map((item) => item._id === id ? { ...item, status } : item));
     } catch (err) { showToast("Error al cambiar el estado", "error"); }
+  };
+
+  const openScheduleModal = async (item) => {
+    setScheduleModal(item);
+    setScheduleError("");
+    const existing = item.scheduledPublish;
+    if (existing?.status === "pending") {
+      const d = new Date(existing.date);
+      setScheduleDate(d.toISOString().slice(0, 10));
+      setScheduleTime(d.toTimeString().slice(0, 5));
+      setSchedulePlatforms(existing.platforms || []);
+    } else {
+      setScheduleDate("");
+      setScheduleTime("");
+      setSchedulePlatforms([]);
+    }
+    try {
+      const data = await getSocialCredentialsAPI();
+      setSocialCreds(data.credentials);
+    } catch { /* silencioso */ }
+  };
+
+  const toggleSchedulePlatform = (id) => {
+    setSchedulePlatforms((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  };
+
+  const handleConfirmSchedule = async () => {
+    if (!scheduleDate || !scheduleTime || schedulePlatforms.length === 0) {
+      setScheduleError("Elige fecha, hora y al menos una red social");
+      return;
+    }
+    const dateTime = new Date(`${scheduleDate}T${scheduleTime}`);
+    if (dateTime <= new Date()) {
+      setScheduleError("La fecha debe ser en el futuro");
+      return;
+    }
+    setScheduleSaving(true);
+    setScheduleError("");
+    try {
+      const data = await schedulePublishAPI(scheduleModal._id, dateTime.toISOString(), schedulePlatforms);
+      setHistory((prev) => prev.map((h) => (h._id === scheduleModal._id ? { ...h, scheduledPublish: data.scheduledPublish } : h)));
+      setDetailModal((prev) => (prev && prev._id === scheduleModal._id ? { ...prev, scheduledPublish: data.scheduledPublish } : prev));
+      showToast("Publicación agendada ✓", "success");
+      setScheduleModal(null);
+    } catch (err) {
+      setScheduleError(err.response?.data?.message || "Error al agendar la publicación");
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleCancelSchedule = async (id) => {
+    try {
+      await cancelSchedulePublishAPI(id);
+      setHistory((prev) => prev.map((h) => (h._id === id ? { ...h, scheduledPublish: null } : h)));
+      setDetailModal((prev) => (prev && prev._id === id ? { ...prev, scheduledPublish: null } : prev));
+      showToast("Publicación agendada cancelada", "info");
+    } catch { showToast("Error al cancelar", "error"); }
   };
 
   const handleGenerateCalendarAI = async () => {
@@ -2153,6 +2220,15 @@ function Home() {
                       Publicar
                     </button>
                   )}
+                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
+                    <button
+                      onClick={() => openScheduleModal(item)}
+                      title={item.scheduledPublish?.status === "pending" ? "Editar publicación agendada" : "Agendar publicación"}
+                      style={{ height: "30px", padding: "0 0.75rem", fontSize: "0.75rem", background: item.scheduledPublish?.status === "pending" ? "rgba(52,211,153,0.12)" : "var(--bg-tertiary)", border: `1px solid ${item.scheduledPublish?.status === "pending" ? "rgba(52,211,153,0.4)" : "var(--border-color)"}`, borderRadius: "var(--border-radius-sm)", color: item.scheduledPublish?.status === "pending" ? "#34d399" : "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
+                    >
+                      📅 {item.scheduledPublish?.status === "pending" ? "Agendado" : "Agendar"}
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       const product = item.input?.product || TYPE_LABELS[item.type] || "resultado";
@@ -2196,6 +2272,15 @@ function Home() {
                     {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
                   </select>
                 </div>
+                {item.scheduledPublish?.status === "pending" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem", fontSize: "0.75rem", color: "#34d399", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.7rem" }}>
+                    🕒 Agendado: {new Date(item.scheduledPublish.date).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    {" · "}{item.scheduledPublish.platforms.map((p) => PLATFORM_LABELS[p] || p).join(", ")}
+                    <button onClick={() => handleCancelSchedule(item._id)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.72rem", fontWeight: "700", padding: 0 }}>
+                      Cancelar
+                    </button>
+                  </div>
+                )}
                 <h4 style={{ color: "var(--text-active)", fontSize: "1rem", marginBottom: "0.1rem", fontWeight: "700", letterSpacing: "-0.02em", borderLeft: "3px solid var(--accent-primary)", paddingLeft: "0.6rem" }}>
                   {item.input?.product || "Sin nombre"}
                 </h4>
@@ -2600,6 +2685,13 @@ function Home() {
                   ✨ Perfeccionar con IA
                 </button>
               )}
+              {(detailModal.type === "campaign" || detailModal.type === "copy" || detailModal.type === "hashtag") && (
+                <button
+                  onClick={() => openScheduleModal(detailModal)}
+                  style={{ background: detailModal.scheduledPublish?.status === "pending" ? "rgba(52,211,153,0.12)" : "var(--bg-tertiary)", border: `1px solid ${detailModal.scheduledPublish?.status === "pending" ? "rgba(52,211,153,0.4)" : "var(--border-color)"}`, color: detailModal.scheduledPublish?.status === "pending" ? "#34d399" : "var(--text-soft)", borderRadius: "var(--border-radius-sm)", padding: "0.45rem 0.9rem", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}>
+                  📅 {detailModal.scheduledPublish?.status === "pending" ? "Agendado — editar" : "Agendar publicación"}
+                </button>
+              )}
               <button
                 onClick={() => {
                   const product = detailModal.input?.product || TYPE_LABELS[detailModal.type] || "resultado";
@@ -2679,6 +2771,65 @@ function Home() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {scheduleModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}
+          onClick={() => setScheduleModal(null)}>
+          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "2rem", width: "92vw", maxWidth: "480px", maxHeight: "92vh", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+              <div>
+                <h3 style={{ color: "var(--text-active)", fontWeight: "800", fontSize: "1.1rem", marginBottom: "0.2rem" }}>📅 Agendar publicación</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>{scheduleModal.input?.product || "Sin nombre"}</p>
+              </div>
+              <button onClick={() => setScheduleModal(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.6rem", marginBottom: "1.25rem" }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Fecha</label>
+                <input type="date" value={scheduleDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setScheduleDate(e.target.value)}
+                  style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.7rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Hora</label>
+                <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
+                  style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.7rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </div>
+
+            <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.6rem" }}>¿En qué redes?</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.25rem" }}>
+              {Object.keys(PLATFORM_LABELS).map((id) => {
+                const connected = socialCreds[id]?.connected;
+                const needsImage = id === "instagram" && !scheduleModal.imageUrl;
+                const needsVideo = id === "tiktok" && !scheduleModal.videoUrl;
+                const disabled = !connected || needsImage || needsVideo;
+                const checked = schedulePlatforms.includes(id);
+                return (
+                  <label key={id} style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.6rem 0.75rem", background: "var(--bg-tertiary)", border: `1px solid ${checked ? "var(--accent-secondary)" : "var(--border-color)"}`, borderRadius: "var(--border-radius-sm)", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1 }}>
+                    <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggleSchedulePlatform(id)} />
+                    <span style={{ flex: 1, fontSize: "0.85rem", fontWeight: "600", color: "var(--text-main)" }}>{PLATFORM_LABELS[id]}</span>
+                    {!connected && <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>No conectada</span>}
+                    {connected && needsImage && <span style={{ fontSize: "0.7rem", color: "#fbbf24" }}>Necesita imagen</span>}
+                    {connected && needsVideo && <span style={{ fontSize: "0.7rem", color: "#fbbf24" }}>Necesita video</span>}
+                  </label>
+                );
+              })}
+            </div>
+
+            {scheduleError && <p style={{ color: "#f87171", fontSize: "0.8rem", marginBottom: "1rem" }}>{scheduleError}</p>}
+
+            <button className="btn-primary" onClick={handleConfirmSchedule} disabled={scheduleSaving} style={{ width: "100%", height: "44px", fontSize: "0.88rem" }}>
+              {scheduleSaving ? "Agendando..." : "📅 Confirmar agendado"}
+            </button>
+            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.75rem", lineHeight: "1.5" }}>
+              Se publicará automáticamente en la fecha y hora elegidas, usando la cuenta que ya tengas conectada en cada red. Conecta cuentas desde "Redes Sociales" en el menú.
+            </p>
           </div>
         </div>
       )}
