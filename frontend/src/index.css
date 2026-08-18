@@ -611,6 +611,18 @@ body {
 .cal-pill-coral  { background: rgba(180,70,50,0.2); color: #f5b4a0; }
 .cal-pill-scheduled { background: rgba(52,211,153,0.18); color: #34d399; cursor: pointer; }
 .cal-pill-scheduled:hover { background: rgba(52,211,153,0.3); }
+.status-pill {
+  font-size: 0.78rem;
+  font-weight: 800;
+  border: 1.5px solid;
+  border-radius: 999px;
+  padding: 0.4rem 1rem 0.4rem 0.85rem;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+}
+.status-pill:hover { transform: translateY(-1px) scale(1.03); }
 .cal-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; }
 .cal-modal { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 1.75rem; width: 340px; box-shadow: var(--card-glow); }
 .cal-modal-title { font-size: 1rem; font-weight: 700; color: var(--text-active); margin-bottom: 1.25rem; }

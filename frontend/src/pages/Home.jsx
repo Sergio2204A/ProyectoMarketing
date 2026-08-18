@@ -54,9 +54,9 @@ const QUALITY_OPTIONS = [
   { value: "high", label: "Premium" },
 ];
 const STATUS_CONFIG = {
-  draft: { label: "Borrador", color: "#948c81", bg: "rgba(148,140,129,0.14)" },
-  approved: { label: "Aprobado", color: "#3d8bd6", bg: "rgba(61,139,214,0.14)" },
-  published: { label: "Publicado", color: "#2f9e5c", bg: "rgba(47,158,92,0.14)" },
+  draft: { label: "Borrador", icon: "📝", color: "#948c81", bg: "rgba(148,140,129,0.14)" },
+  approved: { label: "Aprobado", icon: "✅", color: "#3d8bd6", bg: "rgba(61,139,214,0.14)" },
+  published: { label: "Publicado", icon: "🚀", color: "#2f9e5c", bg: "rgba(47,158,92,0.14)" },
 };
 const STATUS_ORDER = ["draft", "approved", "published"];
 
@@ -2364,19 +2364,6 @@ function Home() {
                       {item.creatorName}
                     </span>
                   )}
-                  <select
-                    value={item.status || "draft"}
-                    onChange={(e) => handleUpdateStatus(item._id, e.target.value)}
-                    title="Cambiar estado"
-                    style={{
-                      fontSize: "0.72rem", fontWeight: "700", border: "none", borderRadius: "999px",
-                      padding: "0.2rem 0.6rem", cursor: "pointer", outline: "none",
-                      color: STATUS_CONFIG[item.status || "draft"].color,
-                      background: STATUS_CONFIG[item.status || "draft"].bg,
-                    }}
-                  >
-                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
-                  </select>
                 </div>
                 {item.scheduledPublish?.status === "pending" && (
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem", fontSize: "0.75rem", color: "#34d399", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.7rem" }}>
@@ -2427,6 +2414,21 @@ function Home() {
                       🎬 Video Script
                     </button>
                   )}
+                  <select
+                    value={item.status || "draft"}
+                    onChange={(e) => handleUpdateStatus(item._id, e.target.value)}
+                    title="Cambiar estado"
+                    className="status-pill"
+                    style={{
+                      marginLeft: "auto",
+                      color: STATUS_CONFIG[item.status || "draft"].color,
+                      background: STATUS_CONFIG[item.status || "draft"].bg,
+                      borderColor: `${STATUS_CONFIG[item.status || "draft"].color}55`,
+                      boxShadow: `0 2px 10px ${STATUS_CONFIG[item.status || "draft"].color}26`,
+                    }}
+                  >
+                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].icon} {STATUS_CONFIG[s].label}</option>)}
+                  </select>
                 </div>
               </div>
               );
@@ -2960,7 +2962,7 @@ function Home() {
                       background: STATUS_CONFIG[detailModal.status || "draft"].bg,
                     }}
                   >
-                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
+                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].icon} {STATUS_CONFIG[s].label}</option>)}
                   </select>
                 </div>
                 <h3 style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "1.05rem", margin: 0 }}>
