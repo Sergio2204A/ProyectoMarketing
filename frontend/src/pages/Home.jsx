@@ -123,6 +123,7 @@ function Home() {
   const [schedulePlatforms, setSchedulePlatforms] = useState([]);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
+  const [scheduledListOpen, setScheduledListOpen] = useState(false);
   const [socialCreds, setSocialCreds] = useState({ facebook: { connected: false }, instagram: { connected: false }, tiktok: { connected: false }, twitter: { connected: false }, linkedin: { connected: false } });
   const [socialLoadingCreds, setSocialLoadingCreds] = useState(false);
   const [socialOpenForm, setSocialOpenForm] = useState(null);
@@ -805,7 +806,7 @@ function Home() {
             ) : (
               <div className="activity-list">
                 {recentFive.map((item) => (
-                  <div key={item._id} className="activity-item activity-item-link" onClick={() => { setActiveTab("history"); openDetailModal(item); }}>
+                  <div key={item._id} className="activity-item activity-item-link" onClick={() => openDetailModal(item)}>
                     <span className={badgeClass(item.type)}>{TYPE_LABELS[item.type] || item.type}</span>
                     <span className="activity-product">{item.input?.product || "—"}</span>
                     {item.creatorName && <span className="activity-time" style={{ color: "var(--accent-secondary)" }}>{item.creatorName}</span>}
@@ -885,6 +886,18 @@ function Home() {
     for (let i = 0; i < firstDay; i++) cells.push({ day: daysInPrev - firstDay + i + 1, current: false });
     for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, current: true });
 
+    /* Publicaciones agendadas desde el Historial (ver [[#agendar-publicación]]) — se muestran
+       también acá para que el equipo vea de un vistazo quién tiene qué agendado y en qué red. */
+    const scheduledItems = history
+      .filter((h) => h.scheduledPublish?.status === "pending")
+      .sort((a, b) => new Date(a.scheduledPublish.date) - new Date(b.scheduledPublish.date));
+    const scheduledByDay = {};
+    scheduledItems.forEach((item) => {
+      const d = new Date(item.scheduledPublish.date);
+      const key = toKey(d.getFullYear(), d.getMonth(), d.getDate());
+      (scheduledByDay[key] = scheduledByDay[key] || []).push(item);
+    });
+
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
         <div className="section-card">
@@ -915,6 +928,9 @@ function Home() {
             <div className="cal-nav">
               <button className="cal-nav-btn" onClick={prevMonth}>&#8249;</button>
               <button className="cal-nav-btn" onClick={nextMonth}>&#8250;</button>
+              <button className="cal-add-btn" style={{ background: "rgba(52,211,153,0.12)", borderColor: "rgba(52,211,153,0.4)", color: "#34d399" }} onClick={() => setScheduledListOpen(true)}>
+                📋 Agendados {scheduledItems.length > 0 ? `(${scheduledItems.length})` : ""}
+              </button>
               <button className="cal-add-btn" onClick={() => openModal()}>+ Nuevo evento</button>
             </div>
           </div>
@@ -932,6 +948,13 @@ function Home() {
                   <div className="cal-day-num">{cell.day}</div>
                   {dayEvents.map((ev, j) => (
                     <div key={j} className={`cal-pill cal-pill-${ev.type}`}>{ev.title}</div>
+                  ))}
+                  {(scheduledByDay[key] || []).map((item, j) => (
+                    <div key={`sched-${j}`} className="cal-pill cal-pill-scheduled"
+                      title={`${item.creatorName || "Alguien"} · ${item.scheduledPublish.platforms.map((p) => PLATFORM_LABELS[p] || p).join(", ")} · ${new Date(item.scheduledPublish.date).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}`}
+                      onClick={(e) => { e.stopPropagation(); openDetailModal(item); }}>
+                      🕒 {(item.creatorName || "Alguien").split(" ")[0]} · {item.input?.product || TYPE_LABELS[item.type]}
+                    </div>
                   ))}
                 </div>
               );
@@ -965,6 +988,60 @@ function Home() {
             </div>
           )}
         </div>
+
+        {scheduledListOpen && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}
+            onClick={() => setScheduledListOpen(false)}>
+            <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-lg)", padding: "1.75rem", width: "92vw", maxWidth: "620px", maxHeight: "85vh", overflowY: "auto" }}
+              onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+                <h3 style={{ color: "var(--text-active)", fontWeight: "800", fontSize: "1.05rem", margin: 0 }}>📋 Publicaciones agendadas</h3>
+                <button onClick={() => setScheduledListOpen(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
+              </div>
+
+              {scheduledItems.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "2rem 0", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📅</div>
+                  Nadie tiene publicaciones agendadas todavía.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                  {scheduledItems.map((item) => (
+                    <div key={item._id} style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderLeft: "3px solid #34d399", borderRadius: "var(--border-radius-sm)", padding: "0.85rem 1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+                        <span style={{ fontWeight: "700", color: "var(--text-active)", fontSize: "0.9rem" }}>{item.input?.product || TYPE_LABELS[item.type] || "Sin nombre"}</span>
+                        <span style={{ fontSize: "0.72rem", color: "#34d399", fontWeight: "700" }}>
+                          🕒 {new Date(item.scheduledPublish.date).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        <span style={{ background: "var(--accent-subtle)", color: "var(--accent-secondary)", padding: "0.12rem 0.5rem", borderRadius: "999px", fontWeight: "700" }}>
+                          {item.creatorName || "Alguien del equipo"}
+                        </span>
+                        <span>{item.scheduledPublish.platforms.map((p) => PLATFORM_LABELS[p] || p).join(", ")}</span>
+                        <span>· {TYPE_LABELS[item.type] || item.type}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem" }}>
+                        <button onClick={() => { setScheduledListOpen(false); openDetailModal(item); }}
+                          style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-soft)", borderRadius: "var(--border-radius-sm)", padding: "0.3rem 0.7rem", fontSize: "0.72rem", cursor: "pointer", fontWeight: "600" }}>
+                          Ver contenido
+                        </button>
+                        <button onClick={() => { setScheduledListOpen(false); openScheduleModal(item); }}
+                          style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-soft)", borderRadius: "var(--border-radius-sm)", padding: "0.3rem 0.7rem", fontSize: "0.72rem", cursor: "pointer", fontWeight: "600" }}>
+                          Editar
+                        </button>
+                        <button onClick={() => handleCancelSchedule(item._id)}
+                          style={{ background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", borderRadius: "var(--border-radius-sm)", padding: "0.3rem 0.7rem", fontSize: "0.72rem", cursor: "pointer", fontWeight: "600" }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -2326,6 +2403,501 @@ function Home() {
             ))}
           </div>
         )}
+      </div>
+    );
+  };
+
+  /* ── REDES SOCIALES ── */
+  const loadSocialCreds = async () => {
+    setSocialLoadingCreds(true);
+    try {
+      const data = await getSocialCredentialsAPI();
+      setSocialCreds(data.credentials);
+    } catch { /* silencioso */ }
+    finally { setSocialLoadingCreds(false); }
+  };
+
+  const handleSocialSave = async (platformId) => {
+    const platform = SOCIAL_PLATFORMS.find((p) => p.id === platformId);
+    if (!platform) return;
+    const allFilled = platform.fields.every((f) => (socialForm[f.key] || "").trim());
+    if (!allFilled) return;
+    setSocialSaving(true);
+    try {
+      const credentials = {};
+      platform.fields.forEach((f) => { credentials[f.key] = socialForm[f.key].trim(); });
+      await saveSocialCredentialsAPI(platformId, credentials);
+      await loadSocialCreds();
+      setSocialForm({});
+      setSocialOpenForm(null);
+      showToast(`Cuenta de ${platform.label} conectada ✓`, "success");
+    } catch { showToast("Error al guardar credenciales", "error"); }
+    finally { setSocialSaving(false); }
+  };
+
+  const handleSocialDisconnect = async (platform) => {
+    setSocialDisconnecting(platform);
+    try {
+      await disconnectSocialAPI(platform);
+      await loadSocialCreds();
+      showToast("Cuenta desconectada", "info");
+    } catch { showToast("Error al desconectar", "error"); }
+    finally { setSocialDisconnecting(null); }
+  };
+
+  const handleMetaConnect = async () => {
+    setSocialConnecting("meta");
+    try {
+      const { url } = await getMetaConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      showToast("No se pudo iniciar la conexión con Meta", "error");
+      setSocialConnecting(null);
+    }
+  };
+
+  const handleTikTokConnect = async () => {
+    setSocialConnecting("tiktok");
+    try {
+      const { url } = await getTikTokConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      showToast("No se pudo iniciar la conexión con TikTok", "error");
+      setSocialConnecting(null);
+    }
+  };
+
+  const handleLinkedInConnect = async () => {
+    setSocialConnecting("linkedin");
+    try {
+      const { url } = await getLinkedInConnectUrlAPI();
+      window.location.href = url;
+    } catch {
+      showToast("No se pudo iniciar la conexión con LinkedIn", "error");
+      setSocialConnecting(null);
+    }
+  };
+
+  const handleSelectMetaPage = async (pageId) => {
+    setMetaSelectingPage(true);
+    try {
+      await selectMetaPageAPI(pageId);
+      setMetaPendingPages(null);
+      await loadSocialCreds();
+      showToast("Página conectada ✓", "success");
+    } catch {
+      showToast("Error al seleccionar la página", "error");
+    } finally {
+      setMetaSelectingPage(false);
+    }
+  };
+
+  const FB_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+    </svg>
+  );
+  const IG_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+    </svg>
+  );
+
+  const TT_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z"/>
+    </svg>
+  );
+  const TW_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </svg>
+  );
+  const LI_LOGO = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+    </svg>
+  );
+
+  const OAUTH_CONNECT_HANDLERS = { meta: handleMetaConnect, tiktok: handleTikTokConnect, linkedin: handleLinkedInConnect };
+  const OAUTH_LABELS = { meta: "Meta", tiktok: "TikTok", linkedin: "LinkedIn" };
+
+  const SOCIAL_PLATFORMS = [
+    { id: "facebook", label: "Facebook", logo: FB_LOGO,
+      badge: null, oauth: "meta",
+      fields: [],
+      note: "Se conecta junto con Instagram con un solo clic — misma cuenta de Meta." },
+    { id: "instagram", label: "Instagram", logo: IG_LOGO,
+      badge: null, oauth: "meta",
+      fields: [],
+      note: "Tu cuenta debe ser Business o Creator y estar enlazada a la Página de Facebook que elijas al conectar." },
+    { id: "tiktok", label: "TikTok", logo: TT_LOGO,
+      badge: null, oauth: "tiktok",
+      fields: [],
+      note: "Mientras la app no esté auditada por TikTok, los videos publicados quedan como borrador privado — hay que abrir la app de TikTok y darle Publicar a mano." },
+    { id: "twitter", label: "Twitter / X", logo: TW_LOGO,
+      badge: null,
+      fields: [
+        { key: "apiKey", label: "API Key", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+        { key: "apiSecret", label: "API Key Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+        { key: "accessToken", label: "Access Token", placeholder: "1234567890-xxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+        { key: "accessTokenSecret", label: "Access Token Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+      ],
+      instructions: ["Ve a developer.twitter.com y crea un proyecto + app", "En 'Settings', activa permisos de Read and Write", "En 'Keys and Tokens' genera: API Key, API Secret, Access Token y Access Token Secret", "Asegúrate de que el Access Token tenga permisos de escritura (no solo lectura)", "Guarda los 4 tokens — todos son necesarios para firmar los tweets con OAuth 1.0a"] },
+    { id: "linkedin", label: "LinkedIn", logo: LI_LOGO,
+      badge: null, oauth: "linkedin",
+      fields: [],
+      note: "Publica a nombre de tu perfil personal de LinkedIn (la API pública no permite publicar como Página de empresa sin aprobación especial de LinkedIn). El acceso expira cada ~60 días — cuando pase, solo hay que reconectar con un clic." },
+  ];
+
+  const renderSocialMedia = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: "800", color: "var(--text-active)", letterSpacing: "-0.03em", margin: 0 }}>Redes Sociales</h1>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginTop: "0.3rem" }}>Conecta tus cuentas para publicar el contenido generado directamente desde la app.</p>
+      </div>
+
+      {metaPendingPages && (
+        <div className="section-card" style={{ border: "1px solid rgba(201,105,43,0.35)" }}>
+          <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.9rem", marginBottom: "0.3rem" }}>Elige qué Página de Facebook conectar</p>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginBottom: "1rem" }}>Tu cuenta administra varias Páginas. La que elijas se usará para publicar en Facebook y, si tiene una cuenta de Instagram enlazada, también en Instagram.</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {metaPendingPages.map((p) => (
+              <button key={p.id} onClick={() => handleSelectMetaPage(p.id)} disabled={metaSelectingPage}
+                style={{ textAlign: "left", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.7rem 0.9rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.85rem" }}>
+                <strong style={{ color: "var(--text-active)" }}>{p.name}</strong>
+                {p.hasInstagram && <span style={{ color: "var(--accent-secondary)", marginLeft: "0.5rem" }}>· Instagram: @{p.instagramUsername}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {socialLoadingCreds ? (
+        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>Cargando...</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {SOCIAL_PLATFORMS.map((platform) => {
+            const cred = socialCreds[platform.id];
+            const isOpen = socialOpenForm === platform.id;
+            const showInstr = socialShowInstructions === platform.id;
+            const isConnecting = socialConnecting === platform.oauth;
+            return (
+              <div key={platform.id} className="section-card" style={{ border: `1px solid ${cred?.connected ? "rgba(201,105,43,0.3)" : "var(--border-color)"}` }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                    <div style={{ width: "42px", height: "42px", borderRadius: "var(--border-radius-md)", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-soft)" }}>
+                      {platform.logo}
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.95rem", margin: 0 }}>{platform.label}</p>
+                      </div>
+                      {cred?.connected ? (
+                        <p style={{ color: "var(--accent-secondary)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Conectado · {platform.id === "twitter" ? "API Key" : "ID"}: {cred.pageId}</p>
+                      ) : (
+                        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Sin conectar</p>
+                      )}
+                    </div>
+                  </div>
+                  {cred?.connected ? (
+                    <button
+                      onClick={() => handleSocialDisconnect(platform.id)}
+                      disabled={socialDisconnecting === platform.id}
+                      style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}
+                    >
+                      {socialDisconnecting === platform.id ? "..." : "Desconectar"}
+                    </button>
+                  ) : platform.oauth ? (
+                    <button
+                      onClick={OAUTH_CONNECT_HANDLERS[platform.oauth]}
+                      disabled={isConnecting}
+                      className="btn-primary"
+                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
+                    >
+                      {isConnecting ? "Redirigiendo..." : `Conectar con ${OAUTH_LABELS[platform.oauth]}`}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { setSocialOpenForm(isOpen ? null : platform.id); setSocialForm({}); setSocialShowInstructions(null); }}
+                      className="btn-primary"
+                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
+                    >
+                      {isOpen ? "Cancelar" : "Conectar"}
+                    </button>
+                  )}
+                </div>
+
+                {platform.oauth && (
+                  <p style={{ marginTop: "0.85rem", paddingTop: "0.85rem", borderTop: "1px solid var(--border-color)", color: "var(--text-muted)", fontSize: "0.78rem", lineHeight: "1.5" }}>
+                    {platform.note}
+                  </p>
+                )}
+
+                {!platform.oauth && !cred?.connected && isOpen && (
+                  <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    <button
+                      onClick={() => setSocialShowInstructions(showInstr ? null : platform.id)}
+                      style={{ alignSelf: "flex-start", background: "none", border: "none", color: "var(--accent-secondary)", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+                    >
+                      {showInstr ? "Ocultar instrucciones" : "¿Cómo obtengo el token? →"}
+                    </button>
+                    {showInstr && (
+                      <ol style={{ margin: 0, paddingLeft: "1.2rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                        {platform.instructions.map((step, i) => (
+                          <li key={i} style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                    {platform.fields.map((field) => (
+                      <div key={field.key}>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>
+                          {field.label}
+                        </label>
+                        <input
+                          type={field.type}
+                          placeholder={field.placeholder}
+                          autoComplete="new-password"
+                          value={socialForm[field.key] || ""}
+                          onChange={(e) => setSocialForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                          style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.8rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    ))}
+                    <button className="btn-primary"
+                      onClick={() => handleSocialSave(platform.id)}
+                      disabled={socialSaving || !platform.fields.every((f) => (socialForm[f.key] || "").trim())}
+                      style={{ height: "42px", fontSize: "0.88rem" }}>
+                      {socialSaving ? "Guardando..." : `Conectar ${platform.label}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="section-card" style={{ background: "var(--accent-subtle)", border: "1px solid rgba(201,105,43,0.15)" }}>
+        <p style={{ color: "var(--accent-secondary)", fontWeight: "700", fontSize: "0.85rem", marginBottom: "0.4rem" }}>¿Cómo funciona la publicación?</p>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.6", margin: 0 }}>
+          Una vez conectada la cuenta, genera tu campaña, copy o hashtags y haz clic en el botón <strong style={{ color: "var(--text-soft)" }}>Publicar</strong> que aparece en el resultado. Se abrirá un modal donde seleccionas la plataforma y publicas con un clic. Instagram requiere que también hayas generado una imagen; TikTok requiere que hayas generado un video.
+        </p>
+      </div>
+    </div>
+  );
+
+  /* ── RENDER PRINCIPAL ── */
+  const sidebarCounts = {
+    campaign: history.filter((h) => h.type === "campaign").length,
+    copy: history.filter((h) => h.type === "copy").length,
+    hashtag: history.filter((h) => h.type === "hashtag").length,
+  };
+
+  return (
+    <div className="app-shell">
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} counts={sidebarCounts} upcomingCount={upcoming.length} />
+      <div className="app-body">
+        <Header activeTab={activeTab} />
+        <div className="main-content">
+          {activeTab === "dashboard" && renderDashboard()}
+          {activeTab === "trends"    && renderTrends()}
+          {activeTab === "history"   && renderHistory()}
+          {activeTab === "calendar"  && renderCalendar()}
+          {activeTab === "social"    && renderSocialMedia()}
+          {activeTab === "video"        && renderVideoStudio()}
+          {activeTab === "imagestudio"  && renderImageStudio()}
+          {(activeTab === "campaign" || activeTab === "copy" || activeTab === "hashtag") && (
+            <>
+              <CampaignForm
+                activeTab={activeTab}
+                formData={formData}
+                handleChange={handleChange}
+                handleGenerate={handleGenerate}
+                loading={loading}
+              />
+              <ResultCard result={result} activeTab={activeTab} loading={loading} generationId={generationId} product={formData.product} onFavorite={toggleFavorite} onPublish={() => setPublishModalOpen({ content: result, imageUrl })} />
+
+              {result && !loading && (
+                <div className="section-card" style={{ marginTop: "0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <div>
+                      <h2 className="section-title" style={{ margin: 0 }}>🎬 Video Script para esta pieza</h2>
+                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Genera un guion de video basado en el contenido generado</p>
+                    </div>
+                    {inlineVideoResult && (
+                      <button onClick={handleDownloadInlineVideo} style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1.1rem" }}>
+                    <div style={{ flex: 1, minWidth: "160px" }}>
+                      <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Formato</label>
+                      <select value={inlineVideoForm.format} onChange={(e) => setInlineVideoForm((f) => ({ ...f, format: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none" }}>
+                        {["Reel de Instagram", "TikTok", "YouTube Short", "Historia / Story", "YouTube largo", "LinkedIn Video"].map((f) => <option key={f}>{f}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: "140px" }}>
+                      <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Duración</label>
+                      <select value={inlineVideoForm.duration} onChange={(e) => setInlineVideoForm((f) => ({ ...f, duration: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none" }}>
+                        {["15 segundos", "30 segundos", "60 segundos", "3 minutos", "5 minutos"].map((d) => <option key={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <button className="btn-primary" onClick={handleGenerateInlineVideo}
+                      disabled={inlineVideoLoading || !formData.product.trim()}
+                      style={{ height: "38px", padding: "0 1.2rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                      {inlineVideoLoading ? "Generando..." : `🎬 ${inlineVideoResult ? "Regenerar" : "Generar"} Video Script`}
+                    </button>
+                  </div>
+
+                  {inlineVideoLoading && (
+                    <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                      <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", margin: "0 auto 1rem" }} />
+                      Escribiendo el guion escena por escena...
+                    </div>
+                  )}
+
+                  {!inlineVideoResult && !inlineVideoLoading && (
+                    <div style={{ minHeight: "100px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                      <span style={{ fontSize: "1.8rem" }}>🎬</span>
+                      <p style={{ margin: 0 }}>Elige formato y duración, luego haz clic en "Generar Video Script"</p>
+                    </div>
+                  )}
+
+                  {inlineVideoResult && !inlineVideoLoading && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                      <div style={{ background: "rgba(201,105,43,0.06)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "1rem" }}>
+                        <p style={{ fontSize: "0.68rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.4rem" }}>🎣 Hook — primeros 3 segundos</p>
+                        <p style={{ color: "var(--text-active)", fontSize: "1rem", fontWeight: "700", lineHeight: "1.5", margin: 0 }}>"{inlineVideoResult.hook}"</p>
+                      </div>
+
+                      <div>
+                        <p style={{ fontSize: "0.68rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>🎬 Escenas ({inlineVideoResult.scenes?.length})</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+                          {(inlineVideoResult.scenes || []).map((scene, i) => (
+                            <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 1fr", gap: "0.6rem", padding: "0.75rem", background: "var(--bg-tertiary)", borderRadius: "var(--border-radius-sm)", border: "1px solid var(--border-color)" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.2rem" }}>
+                                <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "800", fontSize: "0.72rem" }}>{i + 1}</div>
+                                <span style={{ fontSize: "0.58rem", color: "var(--text-muted)", fontWeight: "700", textAlign: "center" }}>{scene.time}</span>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.22rem" }}>
+                                <p style={{ fontSize: "0.77rem", color: "var(--text-soft)", margin: 0 }}><span style={{ fontWeight: "700" }}>📷 </span>{scene.visual}</p>
+                                <p style={{ fontSize: "0.77rem", color: "var(--text-main)", margin: 0 }}><span style={{ fontWeight: "700" }}>🎤 </span>{scene.narration}</p>
+                                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}>✂️ {scene.transition}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                        <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>📝 Caption</p>
+                            <button onClick={() => { navigator.clipboard.writeText(inlineVideoResult.caption); showToast("Caption copiado ✓", "success"); }}
+                              style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.18rem 0.5rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.68rem", fontWeight: "700" }}>
+                              Copiar
+                            </button>
+                          </div>
+                          <p style={{ fontSize: "0.79rem", color: "var(--text-main)", lineHeight: "1.6", margin: 0 }}>{inlineVideoResult.caption}</p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🚀 CTA</p>
+                            <p style={{ fontSize: "0.82rem", color: "var(--text-active)", fontWeight: "700", margin: 0 }}>{inlineVideoResult.cta}</p>
+                          </div>
+                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem", flex: 1 }}>
+                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🎵 Música</p>
+                            <p style={{ fontSize: "0.79rem", color: "var(--text-soft)", margin: 0 }}>{inlineVideoResult.musicTip}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem" }}>
+                        <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.45rem" }}>💡 Tips de producción</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                          {(inlineVideoResult.productionTips || "").split(";").map((tip, i) => tip.trim() && (
+                            <div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                              <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "rgba(201,105,43,0.15)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: "800", flexShrink: 0, marginTop: "2px" }}>{i + 1}</span>
+                              <p style={{ fontSize: "0.79rem", color: "var(--text-soft)", margin: 0, lineHeight: "1.5" }}>{tip.trim()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "campaign" && result && !loading && (
+                <div className="section-card" style={{ marginTop: "0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <div>
+                      <h2 className="section-title" style={{ margin: 0 }}>Imagen para la campaña</h2>
+                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Descríbela tú o déjala en blanco para generarla automáticamente</p>
+                    </div>
+                    {imageUrl && !imageLoading && !imageError && (
+                      <button onClick={handleDownloadImage} style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Input descripción personalizada */}
+                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
+                    <input
+                      type="text"
+                      placeholder="Ej: cafetería acogedora con luz cálida, sin texto ni letras — o déjalo vacío para generar automáticamente"
+                      value={imagePrompt}
+                      onChange={(e) => setImagePrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleGenerateImage()}
+                      style={{ flex: 1, backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none" }}
+                    />
+                    <button className="btn-primary" onClick={handleGenerateImage} style={{ height: "38px", padding: "0 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                      🎨 {imageUrl ? "Regenerar" : "Generar imagen"}
+                    </button>
+                  </div>
+
+                  {!imageUrl ? (
+                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+                      <span style={{ fontSize: "2rem" }}>🎨</span>
+                      <p>Haz clic en "Generar imagen" para crear una visual para esta campaña</p>
+                    </div>
+                  ) : imageError ? (
+                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed rgba(248,113,113,0.2)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "#f87171", fontSize: "0.9rem" }}>
+                      <span style={{ fontSize: "2rem" }}>⚠️</span>
+                      <p>No se pudo generar la imagen. Intenta de nuevo.</p>
+                      <button className="btn-primary" onClick={handleGenerateImage} style={{ height: "36px", padding: "0 1rem", fontSize: "0.85rem" }}>Reintentar</button>
+                    </div>
+                  ) : (
+                    <div style={{ position: "relative", borderRadius: "var(--border-radius-md)", overflow: "hidden", background: "var(--bg-tertiary)", minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {imageLoading && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", background: "var(--bg-tertiary)", zIndex: 1 }}>
+                          <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" }} />
+                          <p className="pulse-element" style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>Generando imagen, puede tomar unos segundos...</p>
+                        </div>
+                      )}
+                      <img
+                        src={imageUrl}
+                        alt={`Campaña ${formData.product}`}
+                        onLoad={handleImageLoaded}
+                        onError={() => { setImageLoading(false); setImageError(true); }}
+                        style={{ width: "100%", borderRadius: "var(--border-radius-md)", display: imageLoading ? "none" : "block" }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {detailModal && (
         <div
@@ -2833,501 +3405,7 @@ function Home() {
           </div>
         </div>
       )}
-      </div>
-    );
-  };
 
-  /* ── REDES SOCIALES ── */
-  const loadSocialCreds = async () => {
-    setSocialLoadingCreds(true);
-    try {
-      const data = await getSocialCredentialsAPI();
-      setSocialCreds(data.credentials);
-    } catch { /* silencioso */ }
-    finally { setSocialLoadingCreds(false); }
-  };
-
-  const handleSocialSave = async (platformId) => {
-    const platform = SOCIAL_PLATFORMS.find((p) => p.id === platformId);
-    if (!platform) return;
-    const allFilled = platform.fields.every((f) => (socialForm[f.key] || "").trim());
-    if (!allFilled) return;
-    setSocialSaving(true);
-    try {
-      const credentials = {};
-      platform.fields.forEach((f) => { credentials[f.key] = socialForm[f.key].trim(); });
-      await saveSocialCredentialsAPI(platformId, credentials);
-      await loadSocialCreds();
-      setSocialForm({});
-      setSocialOpenForm(null);
-      showToast(`Cuenta de ${platform.label} conectada ✓`, "success");
-    } catch { showToast("Error al guardar credenciales", "error"); }
-    finally { setSocialSaving(false); }
-  };
-
-  const handleSocialDisconnect = async (platform) => {
-    setSocialDisconnecting(platform);
-    try {
-      await disconnectSocialAPI(platform);
-      await loadSocialCreds();
-      showToast("Cuenta desconectada", "info");
-    } catch { showToast("Error al desconectar", "error"); }
-    finally { setSocialDisconnecting(null); }
-  };
-
-  const handleMetaConnect = async () => {
-    setSocialConnecting("meta");
-    try {
-      const { url } = await getMetaConnectUrlAPI();
-      window.location.href = url;
-    } catch {
-      showToast("No se pudo iniciar la conexión con Meta", "error");
-      setSocialConnecting(null);
-    }
-  };
-
-  const handleTikTokConnect = async () => {
-    setSocialConnecting("tiktok");
-    try {
-      const { url } = await getTikTokConnectUrlAPI();
-      window.location.href = url;
-    } catch {
-      showToast("No se pudo iniciar la conexión con TikTok", "error");
-      setSocialConnecting(null);
-    }
-  };
-
-  const handleLinkedInConnect = async () => {
-    setSocialConnecting("linkedin");
-    try {
-      const { url } = await getLinkedInConnectUrlAPI();
-      window.location.href = url;
-    } catch {
-      showToast("No se pudo iniciar la conexión con LinkedIn", "error");
-      setSocialConnecting(null);
-    }
-  };
-
-  const handleSelectMetaPage = async (pageId) => {
-    setMetaSelectingPage(true);
-    try {
-      await selectMetaPageAPI(pageId);
-      setMetaPendingPages(null);
-      await loadSocialCreds();
-      showToast("Página conectada ✓", "success");
-    } catch {
-      showToast("Error al seleccionar la página", "error");
-    } finally {
-      setMetaSelectingPage(false);
-    }
-  };
-
-  const FB_LOGO = (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-    </svg>
-  );
-  const IG_LOGO = (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-    </svg>
-  );
-
-  const TT_LOGO = (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z"/>
-    </svg>
-  );
-  const TW_LOGO = (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
-  );
-  const LI_LOGO = (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-    </svg>
-  );
-
-  const OAUTH_CONNECT_HANDLERS = { meta: handleMetaConnect, tiktok: handleTikTokConnect, linkedin: handleLinkedInConnect };
-  const OAUTH_LABELS = { meta: "Meta", tiktok: "TikTok", linkedin: "LinkedIn" };
-
-  const SOCIAL_PLATFORMS = [
-    { id: "facebook", label: "Facebook", logo: FB_LOGO,
-      badge: null, oauth: "meta",
-      fields: [],
-      note: "Se conecta junto con Instagram con un solo clic — misma cuenta de Meta." },
-    { id: "instagram", label: "Instagram", logo: IG_LOGO,
-      badge: null, oauth: "meta",
-      fields: [],
-      note: "Tu cuenta debe ser Business o Creator y estar enlazada a la Página de Facebook que elijas al conectar." },
-    { id: "tiktok", label: "TikTok", logo: TT_LOGO,
-      badge: null, oauth: "tiktok",
-      fields: [],
-      note: "Mientras la app no esté auditada por TikTok, los videos publicados quedan como borrador privado — hay que abrir la app de TikTok y darle Publicar a mano." },
-    { id: "twitter", label: "Twitter / X", logo: TW_LOGO,
-      badge: null,
-      fields: [
-        { key: "apiKey", label: "API Key", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
-        { key: "apiSecret", label: "API Key Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
-        { key: "accessToken", label: "Access Token", placeholder: "1234567890-xxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
-        { key: "accessTokenSecret", label: "Access Token Secret", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
-      ],
-      instructions: ["Ve a developer.twitter.com y crea un proyecto + app", "En 'Settings', activa permisos de Read and Write", "En 'Keys and Tokens' genera: API Key, API Secret, Access Token y Access Token Secret", "Asegúrate de que el Access Token tenga permisos de escritura (no solo lectura)", "Guarda los 4 tokens — todos son necesarios para firmar los tweets con OAuth 1.0a"] },
-    { id: "linkedin", label: "LinkedIn", logo: LI_LOGO,
-      badge: null, oauth: "linkedin",
-      fields: [],
-      note: "Publica a nombre de tu perfil personal de LinkedIn (la API pública no permite publicar como Página de empresa sin aprobación especial de LinkedIn). El acceso expira cada ~60 días — cuando pase, solo hay que reconectar con un clic." },
-  ];
-
-  const renderSocialMedia = () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <div>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: "800", color: "var(--text-active)", letterSpacing: "-0.03em", margin: 0 }}>Redes Sociales</h1>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginTop: "0.3rem" }}>Conecta tus cuentas para publicar el contenido generado directamente desde la app.</p>
-      </div>
-
-      {metaPendingPages && (
-        <div className="section-card" style={{ border: "1px solid rgba(201,105,43,0.35)" }}>
-          <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.9rem", marginBottom: "0.3rem" }}>Elige qué Página de Facebook conectar</p>
-          <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginBottom: "1rem" }}>Tu cuenta administra varias Páginas. La que elijas se usará para publicar en Facebook y, si tiene una cuenta de Instagram enlazada, también en Instagram.</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            {metaPendingPages.map((p) => (
-              <button key={p.id} onClick={() => handleSelectMetaPage(p.id)} disabled={metaSelectingPage}
-                style={{ textAlign: "left", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.7rem 0.9rem", color: "var(--text-soft)", cursor: "pointer", fontSize: "0.85rem" }}>
-                <strong style={{ color: "var(--text-active)" }}>{p.name}</strong>
-                {p.hasInstagram && <span style={{ color: "var(--accent-secondary)", marginLeft: "0.5rem" }}>· Instagram: @{p.instagramUsername}</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {socialLoadingCreds ? (
-        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>Cargando...</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {SOCIAL_PLATFORMS.map((platform) => {
-            const cred = socialCreds[platform.id];
-            const isOpen = socialOpenForm === platform.id;
-            const showInstr = socialShowInstructions === platform.id;
-            const isConnecting = socialConnecting === platform.oauth;
-            return (
-              <div key={platform.id} className="section-card" style={{ border: `1px solid ${cred?.connected ? "rgba(201,105,43,0.3)" : "var(--border-color)"}` }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-                    <div style={{ width: "42px", height: "42px", borderRadius: "var(--border-radius-md)", background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-soft)" }}>
-                      {platform.logo}
-                    </div>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <p style={{ color: "var(--text-active)", fontWeight: "700", fontSize: "0.95rem", margin: 0 }}>{platform.label}</p>
-                      </div>
-                      {cred?.connected ? (
-                        <p style={{ color: "var(--accent-secondary)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Conectado · {platform.id === "twitter" ? "API Key" : "ID"}: {cred.pageId}</p>
-                      ) : (
-                        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", margin: 0, marginTop: "0.1rem" }}>Sin conectar</p>
-                      )}
-                    </div>
-                  </div>
-                  {cred?.connected ? (
-                    <button
-                      onClick={() => handleSocialDisconnect(platform.id)}
-                      disabled={socialDisconnecting === platform.id}
-                      style={{ background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-muted)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}
-                    >
-                      {socialDisconnecting === platform.id ? "..." : "Desconectar"}
-                    </button>
-                  ) : platform.oauth ? (
-                    <button
-                      onClick={OAUTH_CONNECT_HANDLERS[platform.oauth]}
-                      disabled={isConnecting}
-                      className="btn-primary"
-                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
-                    >
-                      {isConnecting ? "Redirigiendo..." : `Conectar con ${OAUTH_LABELS[platform.oauth]}`}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { setSocialOpenForm(isOpen ? null : platform.id); setSocialForm({}); setSocialShowInstructions(null); }}
-                      className="btn-primary"
-                      style={{ padding: "0.4rem 1rem", fontSize: "0.8rem", height: "auto" }}
-                    >
-                      {isOpen ? "Cancelar" : "Conectar"}
-                    </button>
-                  )}
-                </div>
-
-                {platform.oauth && (
-                  <p style={{ marginTop: "0.85rem", paddingTop: "0.85rem", borderTop: "1px solid var(--border-color)", color: "var(--text-muted)", fontSize: "0.78rem", lineHeight: "1.5" }}>
-                    {platform.note}
-                  </p>
-                )}
-
-                {!platform.oauth && !cred?.connected && isOpen && (
-                  <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: "1rem" }}>
-                    <button
-                      onClick={() => setSocialShowInstructions(showInstr ? null : platform.id)}
-                      style={{ alignSelf: "flex-start", background: "none", border: "none", color: "var(--accent-secondary)", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", textDecoration: "underline", padding: 0 }}
-                    >
-                      {showInstr ? "Ocultar instrucciones" : "¿Cómo obtengo el token? →"}
-                    </button>
-                    {showInstr && (
-                      <ol style={{ margin: 0, paddingLeft: "1.2rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                        {platform.instructions.map((step, i) => (
-                          <li key={i} style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.5" }}>{step}</li>
-                        ))}
-                      </ol>
-                    )}
-                    {platform.fields.map((field) => (
-                      <div key={field.key}>
-                        <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>
-                          {field.label}
-                        </label>
-                        <input
-                          type={field.type}
-                          placeholder={field.placeholder}
-                          autoComplete="new-password"
-                          value={socialForm[field.key] || ""}
-                          onChange={(e) => setSocialForm((f) => ({ ...f, [field.key]: e.target.value }))}
-                          style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.8rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none", boxSizing: "border-box" }}
-                        />
-                      </div>
-                    ))}
-                    <button className="btn-primary"
-                      onClick={() => handleSocialSave(platform.id)}
-                      disabled={socialSaving || !platform.fields.every((f) => (socialForm[f.key] || "").trim())}
-                      style={{ height: "42px", fontSize: "0.88rem" }}>
-                      {socialSaving ? "Guardando..." : `Conectar ${platform.label}`}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="section-card" style={{ background: "var(--accent-subtle)", border: "1px solid rgba(201,105,43,0.15)" }}>
-        <p style={{ color: "var(--accent-secondary)", fontWeight: "700", fontSize: "0.85rem", marginBottom: "0.4rem" }}>¿Cómo funciona la publicación?</p>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.6", margin: 0 }}>
-          Una vez conectada la cuenta, genera tu campaña, copy o hashtags y haz clic en el botón <strong style={{ color: "var(--text-soft)" }}>Publicar</strong> que aparece en el resultado. Se abrirá un modal donde seleccionas la plataforma y publicas con un clic. Instagram requiere que también hayas generado una imagen; TikTok requiere que hayas generado un video.
-        </p>
-      </div>
-    </div>
-  );
-
-  /* ── RENDER PRINCIPAL ── */
-  const sidebarCounts = {
-    campaign: history.filter((h) => h.type === "campaign").length,
-    copy: history.filter((h) => h.type === "copy").length,
-    hashtag: history.filter((h) => h.type === "hashtag").length,
-  };
-
-  return (
-    <div className="app-shell">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} counts={sidebarCounts} upcomingCount={upcoming.length} />
-      <div className="app-body">
-        <Header activeTab={activeTab} />
-        <div className="main-content">
-          {activeTab === "dashboard" && renderDashboard()}
-          {activeTab === "trends"    && renderTrends()}
-          {activeTab === "history"   && renderHistory()}
-          {activeTab === "calendar"  && renderCalendar()}
-          {activeTab === "social"    && renderSocialMedia()}
-          {activeTab === "video"        && renderVideoStudio()}
-          {activeTab === "imagestudio"  && renderImageStudio()}
-          {(activeTab === "campaign" || activeTab === "copy" || activeTab === "hashtag") && (
-            <>
-              <CampaignForm
-                activeTab={activeTab}
-                formData={formData}
-                handleChange={handleChange}
-                handleGenerate={handleGenerate}
-                loading={loading}
-              />
-              <ResultCard result={result} activeTab={activeTab} loading={loading} generationId={generationId} product={formData.product} onFavorite={toggleFavorite} onPublish={() => setPublishModalOpen({ content: result, imageUrl })} />
-
-              {result && !loading && (
-                <div className="section-card" style={{ marginTop: "0" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-                    <div>
-                      <h2 className="section-title" style={{ margin: 0 }}>🎬 Video Script para esta pieza</h2>
-                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Genera un guion de video basado en el contenido generado</p>
-                    </div>
-                    {inlineVideoResult && (
-                      <button onClick={handleDownloadInlineVideo} style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Descargar
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1.1rem" }}>
-                    <div style={{ flex: 1, minWidth: "160px" }}>
-                      <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Formato</label>
-                      <select value={inlineVideoForm.format} onChange={(e) => setInlineVideoForm((f) => ({ ...f, format: e.target.value }))}
-                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none" }}>
-                        {["Reel de Instagram", "TikTok", "YouTube Short", "Historia / Story", "YouTube largo", "LinkedIn Video"].map((f) => <option key={f}>{f}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ flex: 1, minWidth: "140px" }}>
-                      <label style={{ fontSize: "0.7rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "0.35rem" }}>Duración</label>
-                      <select value={inlineVideoForm.duration} onChange={(e) => setInlineVideoForm((f) => ({ ...f, duration: e.target.value }))}
-                        style={{ width: "100%", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.85rem", outline: "none" }}>
-                        {["15 segundos", "30 segundos", "60 segundos", "3 minutos", "5 minutos"].map((d) => <option key={d}>{d}</option>)}
-                      </select>
-                    </div>
-                    <button className="btn-primary" onClick={handleGenerateInlineVideo}
-                      disabled={inlineVideoLoading || !formData.product.trim()}
-                      style={{ height: "38px", padding: "0 1.2rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
-                      {inlineVideoLoading ? "Generando..." : `🎬 ${inlineVideoResult ? "Regenerar" : "Generar"} Video Script`}
-                    </button>
-                  </div>
-
-                  {inlineVideoLoading && (
-                    <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
-                      <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", margin: "0 auto 1rem" }} />
-                      Escribiendo el guion escena por escena...
-                    </div>
-                  )}
-
-                  {!inlineVideoResult && !inlineVideoLoading && (
-                    <div style={{ minHeight: "100px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.875rem" }}>
-                      <span style={{ fontSize: "1.8rem" }}>🎬</span>
-                      <p style={{ margin: 0 }}>Elige formato y duración, luego haz clic en "Generar Video Script"</p>
-                    </div>
-                  )}
-
-                  {inlineVideoResult && !inlineVideoLoading && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-                      <div style={{ background: "rgba(201,105,43,0.06)", border: "1px solid rgba(201,105,43,0.35)", borderRadius: "var(--border-radius-sm)", padding: "1rem" }}>
-                        <p style={{ fontSize: "0.68rem", fontWeight: "700", color: "var(--accent-secondary)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.4rem" }}>🎣 Hook — primeros 3 segundos</p>
-                        <p style={{ color: "var(--text-active)", fontSize: "1rem", fontWeight: "700", lineHeight: "1.5", margin: 0 }}>"{inlineVideoResult.hook}"</p>
-                      </div>
-
-                      <div>
-                        <p style={{ fontSize: "0.68rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>🎬 Escenas ({inlineVideoResult.scenes?.length})</p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
-                          {(inlineVideoResult.scenes || []).map((scene, i) => (
-                            <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 1fr", gap: "0.6rem", padding: "0.75rem", background: "var(--bg-tertiary)", borderRadius: "var(--border-radius-sm)", border: "1px solid var(--border-color)" }}>
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.2rem" }}>
-                                <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "800", fontSize: "0.72rem" }}>{i + 1}</div>
-                                <span style={{ fontSize: "0.58rem", color: "var(--text-muted)", fontWeight: "700", textAlign: "center" }}>{scene.time}</span>
-                              </div>
-                              <div style={{ display: "flex", flexDirection: "column", gap: "0.22rem" }}>
-                                <p style={{ fontSize: "0.77rem", color: "var(--text-soft)", margin: 0 }}><span style={{ fontWeight: "700" }}>📷 </span>{scene.visual}</p>
-                                <p style={{ fontSize: "0.77rem", color: "var(--text-main)", margin: 0 }}><span style={{ fontWeight: "700" }}>🎤 </span>{scene.narration}</p>
-                                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}>✂️ {scene.transition}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                        <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>📝 Caption</p>
-                            <button onClick={() => { navigator.clipboard.writeText(inlineVideoResult.caption); showToast("Caption copiado ✓", "success"); }}
-                              style={{ background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.3)", borderRadius: "var(--border-radius-sm)", padding: "0.18rem 0.5rem", color: "var(--accent-secondary)", cursor: "pointer", fontSize: "0.68rem", fontWeight: "700" }}>
-                              Copiar
-                            </button>
-                          </div>
-                          <p style={{ fontSize: "0.79rem", color: "var(--text-main)", lineHeight: "1.6", margin: 0 }}>{inlineVideoResult.caption}</p>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem", flex: 1 }}>
-                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🚀 CTA</p>
-                            <p style={{ fontSize: "0.82rem", color: "var(--text-active)", fontWeight: "700", margin: 0 }}>{inlineVideoResult.cta}</p>
-                          </div>
-                          <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem", flex: 1 }}>
-                            <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>🎵 Música</p>
-                            <p style={{ fontSize: "0.79rem", color: "var(--text-soft)", margin: 0 }}>{inlineVideoResult.musicTip}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.85rem" }}>
-                        <p style={{ fontSize: "0.67rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.45rem" }}>💡 Tips de producción</p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                          {(inlineVideoResult.productionTips || "").split(";").map((tip, i) => tip.trim() && (
-                            <div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-                              <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "rgba(201,105,43,0.15)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: "800", flexShrink: 0, marginTop: "2px" }}>{i + 1}</span>
-                              <p style={{ fontSize: "0.79rem", color: "var(--text-soft)", margin: 0, lineHeight: "1.5" }}>{tip.trim()}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTab === "campaign" && result && !loading && (
-                <div className="section-card" style={{ marginTop: "0" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-                    <div>
-                      <h2 className="section-title" style={{ margin: 0 }}>Imagen para la campaña</h2>
-                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Descríbela tú o déjala en blanco para generarla automáticamente</p>
-                    </div>
-                    {imageUrl && !imageLoading && !imageError && (
-                      <button onClick={handleDownloadImage} style={{ height: "36px", padding: "0 0.9rem", fontSize: "0.85rem", background: "transparent", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-md)", color: "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Descargar
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Input descripción personalizada */}
-                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
-                    <input
-                      type="text"
-                      placeholder="Ej: cafetería acogedora con luz cálida, sin texto ni letras — o déjalo vacío para generar automáticamente"
-                      value={imagePrompt}
-                      onChange={(e) => setImagePrompt(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleGenerateImage()}
-                      style={{ flex: 1, backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.6rem 0.9rem", color: "var(--text-active)", fontSize: "0.83rem", outline: "none" }}
-                    />
-                    <button className="btn-primary" onClick={handleGenerateImage} style={{ height: "38px", padding: "0 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
-                      🎨 {imageUrl ? "Regenerar" : "Generar imagen"}
-                    </button>
-                  </div>
-
-                  {!imageUrl ? (
-                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed var(--border-color)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                      <span style={{ fontSize: "2rem" }}>🎨</span>
-                      <p>Haz clic en "Generar imagen" para crear una visual para esta campaña</p>
-                    </div>
-                  ) : imageError ? (
-                    <div style={{ minHeight: "200px", background: "var(--bg-tertiary)", border: "1px dashed rgba(248,113,113,0.2)", borderRadius: "var(--border-radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", color: "#f87171", fontSize: "0.9rem" }}>
-                      <span style={{ fontSize: "2rem" }}>⚠️</span>
-                      <p>No se pudo generar la imagen. Intenta de nuevo.</p>
-                      <button className="btn-primary" onClick={handleGenerateImage} style={{ height: "36px", padding: "0 1rem", fontSize: "0.85rem" }}>Reintentar</button>
-                    </div>
-                  ) : (
-                    <div style={{ position: "relative", borderRadius: "var(--border-radius-md)", overflow: "hidden", background: "var(--bg-tertiary)", minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {imageLoading && (
-                        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", background: "var(--bg-tertiary)", zIndex: 1 }}>
-                          <div className="pulse-element" style={{ width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))" }} />
-                          <p className="pulse-element" style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>Generando imagen, puede tomar unos segundos...</p>
-                        </div>
-                      )}
-                      <img
-                        src={imageUrl}
-                        alt={`Campaña ${formData.product}`}
-                        onLoad={handleImageLoaded}
-                        onError={() => { setImageLoading(false); setImageError(true); }}
-                        style={{ width: "100%", borderRadius: "var(--border-radius-md)", display: imageLoading ? "none" : "block" }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
       <PublishModal
         isOpen={!!publishModalOpen}
         onClose={() => { setPublishModalOpen(null); setHistorySearch(""); loadHistory(); }}
