@@ -2232,7 +2232,6 @@ function Home() {
       { id: "campaign", label: "⚡ Campañas" },
       { id: "copy", label: "✍️ Copys" },
       { id: "hashtag", label: "# Hashtags" },
-      { id: "text", label: "✍️ Copys & Hashtags" },
       { id: "video", label: "🎬 Videos" },
     ];
 
@@ -2260,13 +2259,16 @@ function Home() {
        una sola bandeja — con un tipo ya elegido queda un solo grupo, se muestra plano. */
     const GROUP_ORDER = ["campaign", "copy", "hashtag", "video"];
     const GROUP_LABELS = { campaign: "⚡ Campañas", copy: "✍️ Copys", hashtag: "# Hashtags", video: "🎬 Video Scripts" };
-    const groupedRows = historyTypeFilter !== "all"
-      ? filtered.map((item) => ({ kind: "item", item }))
-      : GROUP_ORDER.flatMap((type) => {
-          const items = filtered.filter((it) => it.type === type);
-          if (items.length === 0) return [];
-          return [{ kind: "header", type, count: items.length }, ...items.map((item) => ({ kind: "item", item }))];
-        });
+    const buildGroups = (types) => types.flatMap((type) => {
+      const items = filtered.filter((it) => it.type === type);
+      if (items.length === 0) return [];
+      return [{ kind: "header", type, count: items.length }, ...items.map((item) => ({ kind: "item", item }))];
+    });
+    /* "text" (Copys & Hashtags, usado por el cuadrito del Dashboard) también se divide en sus
+       dos secciones — no queda todo mezclado solo porque no es el filtro "Todos los tipos". */
+    const groupedRows = historyTypeFilter === "all" ? buildGroups(GROUP_ORDER)
+      : historyTypeFilter === "text" ? buildGroups(["copy", "hashtag"])
+      : filtered.map((item) => ({ kind: "item", item }));
 
     return (
       <div className="section-card">
