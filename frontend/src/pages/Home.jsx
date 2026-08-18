@@ -97,7 +97,10 @@ function Home() {
   const [trendsTopic, setTrendsTopic] = useState("");
   const [manualModal, setManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ title: "", description: "", color: "#f5b27a" });
-  const [historyFilter, setHistoryFilter] = useState("all");
+  const [historyStatusTab, setHistoryStatusTab] = useState("all");
+  const [historyTypeFilter, setHistoryTypeFilter] = useState("all");
+  const [historyFavoritesOnly, setHistoryFavoritesOnly] = useState(false);
+  const [openCardMenu, setOpenCardMenu] = useState(null);
   const [historySearch, setHistorySearch] = useState("");
   const [refineModal, setRefineModal] = useState(null);
   const [refineResult, setRefineResult] = useState("");
@@ -702,25 +705,25 @@ function Home() {
         </div>
 
         <div className="metrics-grid">
-          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("all"); setActiveTab("history"); }} title="Ver todo el historial">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryStatusTab("all"); setHistoryTypeFilter("all"); setHistoryFavoritesOnly(false); setActiveTab("history"); }} title="Ver todo el historial">
             <div className="metric-icon" style={{ background: "rgba(201,105,43,0.12)" }}>📊</div>
             <div className="metric-value">{history.length}</div>
             <div className="metric-label">Total generado</div>
             <div className="metric-sub">Creaciones acumuladas</div>
           </div>
-          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("campaign"); setActiveTab("history"); }} title="Ver solo campañas">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryStatusTab("all"); setHistoryTypeFilter("campaign"); setHistoryFavoritesOnly(false); setActiveTab("history"); }} title="Ver solo campañas">
             <div className="metric-icon" style={{ background: "rgba(180,90,30,0.12)" }}>⚡</div>
             <div className="metric-value">{totalCampaigns}</div>
             <div className="metric-label">Campañas</div>
             <div className="metric-sub">Estrategias creadas</div>
           </div>
-          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("text"); setActiveTab("history"); }} title="Ver solo copys y hashtags">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryStatusTab("all"); setHistoryTypeFilter("text"); setHistoryFavoritesOnly(false); setActiveTab("history"); }} title="Ver solo copys y hashtags">
             <div className="metric-icon" style={{ background: "rgba(150,100,40,0.12)" }}>✍️</div>
             <div className="metric-value">{totalCopys + totalHashtags}</div>
             <div className="metric-label">Copys & Hashtags</div>
             <div className="metric-sub">Textos generados</div>
           </div>
-          <div className="metric-card metric-card-link" onClick={() => { setHistoryFilter("favorites"); setActiveTab("history"); }} title="Ver solo favoritos">
+          <div className="metric-card metric-card-link" onClick={() => { setHistoryStatusTab("all"); setHistoryTypeFilter("all"); setHistoryFavoritesOnly(true); setActiveTab("history"); }} title="Ver solo favoritos">
             <div className="metric-icon" style={{ background: "rgba(250,200,50,0.1)" }}>⭐</div>
             <div className="metric-value">{totalFavs}</div>
             <div className="metric-label">Favoritos</div>
@@ -2218,41 +2221,52 @@ function Home() {
 
   /* ── HISTORIAL ── */
   const renderHistory = () => {
-    const FILTERS = [
-      { id: "all", label: "Todos" }, { id: "favorites", label: "⭐ Favoritos" },
-      { id: "campaign", label: "Campañas" }, { id: "copy", label: "Copys" },
-      { id: "hashtag", label: "Hashtags" },
-      { id: "video", label: "🎬 Videos" },
-      { id: "status:draft", label: "Borrador" }, { id: "status:approved", label: "Aprobado" }, { id: "status:published", label: "Publicado" },
+    const STATUS_TABS = [
+      { id: "all", label: "Todos" },
+      { id: "draft", label: "Borradores" },
+      { id: "approved", label: "Aprobados" },
+      { id: "published", label: "Publicados" },
     ];
-    const filtered = history.filter((item) => {
-      const matchesFilter = historyFilter === "all" ? true
-        : historyFilter === "favorites" ? item.isFavorite
-        : historyFilter === "text" ? (item.type === "copy" || item.type === "hashtag")
-        : historyFilter.startsWith("status:") ? (item.status || "draft") === historyFilter.replace("status:", "")
-        : item.type === historyFilter;
+    const TYPE_OPTIONS = [
+      { id: "all", label: "Todos los tipos" },
+      { id: "campaign", label: "⚡ Campañas" },
+      { id: "copy", label: "✍️ Copys" },
+      { id: "hashtag", label: "# Hashtags" },
+      { id: "text", label: "✍️ Copys & Hashtags" },
+      { id: "video", label: "🎬 Videos" },
+    ];
+
+    /* El estado es la navegación principal (tabs); tipo y favoritos son filtros secundarios que
+       no dependen del tab activo — por eso los conteos de los tabs se calculan sobre "baseFiltered"
+       (ya con tipo/favoritos/búsqueda aplicados) y no sobre el historial completo. */
+    const baseFiltered = history.filter((item) => {
+      const matchesType = historyTypeFilter === "all" ? true
+        : historyTypeFilter === "text" ? (item.type === "copy" || item.type === "hashtag")
+        : item.type === historyTypeFilter;
+      const matchesFav = !historyFavoritesOnly || item.isFavorite;
       const q = historySearch.toLowerCase();
       const matchesSearch = !q || (item.input?.product || "").toLowerCase().includes(q) || (typeof item.output === "string" && item.output.toLowerCase().includes(q));
-      return matchesFilter && matchesSearch;
+      return matchesType && matchesFav && matchesSearch;
     });
+    const statusCounts = {
+      all: baseFiltered.length,
+      draft: baseFiltered.filter((i) => (i.status || "draft") === "draft").length,
+      approved: baseFiltered.filter((i) => (i.status || "draft") === "approved").length,
+      published: baseFiltered.filter((i) => (i.status || "draft") === "published").length,
+    };
+    const filtered = historyStatusTab === "all" ? baseFiltered : baseFiltered.filter((i) => (i.status || "draft") === historyStatusTab);
 
-    /* Con "Todos" seleccionado se divide por tipo (secciones con encabezado) en vez de mezclar
-       todo en una sola bandeja — con cualquier otro filtro ya es un solo tipo, se muestra plano. */
+    /* Sin filtro de tipo se divide por tipo (secciones con encabezado) en vez de mezclar todo en
+       una sola bandeja — con un tipo ya elegido queda un solo grupo, se muestra plano. */
     const GROUP_ORDER = ["campaign", "copy", "hashtag", "video"];
     const GROUP_LABELS = { campaign: "⚡ Campañas", copy: "✍️ Copys", hashtag: "# Hashtags", video: "🎬 Video Scripts" };
-    const groupedRows = historyFilter !== "all"
+    const groupedRows = historyTypeFilter !== "all"
       ? filtered.map((item) => ({ kind: "item", item }))
       : GROUP_ORDER.flatMap((type) => {
           const items = filtered.filter((it) => it.type === type);
           if (items.length === 0) return [];
           return [{ kind: "header", type, count: items.length }, ...items.map((item) => ({ kind: "item", item }))];
         });
-    const filterBtnStyle = (id) => ({
-      padding: "0.35rem 0.9rem", borderRadius: "50px", border: "1px solid", fontSize: "0.78rem", fontWeight: "600", cursor: "pointer", transition: "all 0.2s",
-      borderColor: historyFilter === id ? "var(--accent-primary)" : "var(--border-color)",
-      backgroundColor: historyFilter === id ? "rgba(201,105,43,0.12)" : "transparent",
-      color: historyFilter === id ? "var(--accent-secondary)" : "var(--text-muted)",
-    });
 
     return (
       <div className="section-card">
@@ -2264,7 +2278,18 @@ function Home() {
             </button>
           )}
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap" }}>
+
+        {/* Tabs de estado — navegación principal */}
+        <div className="history-tabs">
+          {STATUS_TABS.map((t) => (
+            <button key={t.id} className={`history-tab${historyStatusTab === t.id ? " active" : ""}`} onClick={() => setHistoryStatusTab(t.id)}>
+              {t.label} <span className="history-tab-count">{statusCounts[t.id]}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Buscador + filtro de tipo (secundario) + favoritos */}
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", margin: "1.25rem 0 1.5rem", flexWrap: "wrap" }}>
           <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
             <svg style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", opacity: 0.4 }} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
@@ -2281,21 +2306,34 @@ function Home() {
               Limpiar ✕
             </button>
           )}
+          <select value={historyTypeFilter} onChange={(e) => setHistoryTypeFilter(e.target.value)}
+            style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "var(--border-radius-sm)", padding: "0.55rem 0.8rem", color: "var(--text-main)", fontSize: "0.83rem", outline: "none", cursor: "pointer" }}>
+            {TYPE_OPTIONS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+          <button
+            onClick={() => setHistoryFavoritesOnly((v) => !v)}
+            title={historyFavoritesOnly ? "Quitar filtro de favoritos" : "Ver solo favoritos"}
+            style={{
+              height: "36px", padding: "0 0.9rem", fontSize: "0.82rem", fontWeight: "700", borderRadius: "var(--border-radius-sm)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem",
+              border: `1px solid ${historyFavoritesOnly ? "rgba(250,204,21,0.5)" : "var(--border-color)"}`,
+              background: historyFavoritesOnly ? "rgba(250,204,21,0.12)" : "var(--bg-tertiary)",
+              color: historyFavoritesOnly ? "#facc15" : "var(--text-soft)",
+            }}>
+            {historyFavoritesOnly ? "★" : "☆"} Favoritos
+          </button>
         </div>
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1.5rem" }}>
-          {FILTERS.map((f) => (<button key={f.id} style={filterBtnStyle(f.id)} onClick={() => setHistoryFilter(f.id)}>{f.label}</button>))}
-        </div>
+
         {filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--text-muted)", fontSize: "0.875rem" }}>
             <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📋</div>
-            {historyFilter === "favorites" ? "No tienes favoritos guardados." : "No hay elementos en esta categoría."}
+            {historyFavoritesOnly ? "No tienes favoritos con estos filtros." : "No hay elementos con estos filtros."}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {groupedRows.map((row) => {
               if (row.kind === "header") {
                 return (
-                  <div key={`group-${row.type}`} style={{ display: "flex", alignItems: "center", gap: "0.6rem", margin: "0.5rem 0 -0.25rem" }}>
+                  <div key={`group-${row.type}`} style={{ display: "flex", alignItems: "center", gap: "0.6rem", margin: "0.5rem 0 -0.15rem" }}>
                     <h4 style={{ fontSize: "0.85rem", fontWeight: "800", color: "var(--text-active)", margin: 0, whiteSpace: "nowrap" }}>{GROUP_LABELS[row.type]}</h4>
                     <span style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--accent-secondary)", background: "var(--accent-subtle)", padding: "0.1rem 0.55rem", borderRadius: "999px" }}>{row.count}</span>
                     <div style={{ flex: 1, height: "1px", background: "var(--border-color)" }} />
@@ -2303,134 +2341,104 @@ function Home() {
                 );
               }
               const item = row.item;
+              const isDraft = (item.status || "draft") === "draft";
+              const isTextType = item.type === "campaign" || item.type === "copy" || item.type === "hashtag";
+              const menuOpen = openCardMenu === item._id;
+              const statusColor = STATUS_CONFIG[item.status || "draft"].color;
               return (
-              <div key={item._id} className="history-card" style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.35)" : "var(--border-color)"}`, padding: "1.25rem 1.5rem" }}>
-                <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", justifyContent: "flex-end", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-                  {(item.status || "draft") === "draft" && (
-                    <button onClick={() => handleUpdateStatus(item._id, "approved")} title="Aprobar este contenido" className="btn-action-approve">
-                      ✓ Aprobar
-                    </button>
-                  )}
-                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
-                    <button onClick={() => { setRefineModal(item); setRefineResult(""); }} title="Perfeccionar con IA" className="btn-action-refine">
-                      ✨ Perfeccionar
-                    </button>
-                  )}
-                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
-                    <button
-                      onClick={() => setPublishModalOpen({ content: item.output, imageUrl: item.imageUrl || null })}
-                      title="Publicar en redes sociales"
-                      style={{ height: "30px", padding: "0 0.75rem", fontSize: "0.75rem", background: "rgba(201,105,43,0.12)", border: "1px solid rgba(201,105,43,0.4)", borderRadius: "var(--border-radius-sm)", color: "var(--accent-secondary)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                      Publicar
-                    </button>
-                  )}
-                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
-                    <button
-                      onClick={() => openScheduleModal(item)}
-                      title={item.scheduledPublish?.status === "pending" ? "Editar publicación agendada" : "Agendar publicación"}
-                      style={{ height: "30px", padding: "0 0.75rem", fontSize: "0.75rem", background: item.scheduledPublish?.status === "pending" ? "rgba(52,211,153,0.12)" : "var(--bg-tertiary)", border: `1px solid ${item.scheduledPublish?.status === "pending" ? "rgba(52,211,153,0.4)" : "var(--border-color)"}`, borderRadius: "var(--border-radius-sm)", color: item.scheduledPublish?.status === "pending" ? "#34d399" : "var(--text-soft)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
-                    >
-                      📅 {item.scheduledPublish?.status === "pending" ? "Agendado" : "Agendar"}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      const product = item.input?.product || TYPE_LABELS[item.type] || "resultado";
-                      if (item.type === "video" && item.output?.hook) {
-                        exportVideoScriptToPDF({ product, script: item.output });
-                      } else {
-                        exportResultToPDF({ type: item.type, product, content: item.output });
-                      }
-                    }}
-                    title="Descargar como PDF"
-                    className="btn-action-download">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    PDF
-                  </button>
-                  <button onClick={() => toggleFavorite(item._id)} title={item.isFavorite ? "Quitar de favoritos" : "Guardar en favoritos"} className={item.isFavorite ? "btn-action-fav active" : "btn-action-fav"}>
-                    {item.isFavorite ? "★" : "☆"} Fav
-                  </button>
-                  <button onClick={() => deleteHistoryItem(item._id)} title="Eliminar" className="btn-action-delete">✕</button>
-                </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "0.7rem" }}>
-                  <span style={{ fontSize: "0.75rem", background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))", color: "#fff", padding: "0.25rem 0.7rem", borderRadius: "5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", boxShadow: "0 2px 8px rgba(201,105,43,0.3)" }}>
-                    {TYPE_LABELS[item.type] || item.type}
-                  </span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{new Date(item.createdAt).toLocaleString()}</span>
-                  {item.creatorName && (
-                    <span style={{ fontSize: "0.72rem", color: "var(--accent-secondary)", fontWeight: "700", background: "var(--accent-subtle)", padding: "0.15rem 0.55rem", borderRadius: "999px" }}>
-                      {item.creatorName}
-                    </span>
-                  )}
-                </div>
-                {item.scheduledPublish?.status === "pending" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem", fontSize: "0.75rem", color: "#34d399", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", borderRadius: "var(--border-radius-sm)", padding: "0.4rem 0.7rem" }}>
-                    🕒 Agendado: {new Date(item.scheduledPublish.date).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    {" · "}{item.scheduledPublish.platforms.map((p) => PLATFORM_LABELS[p] || p).join(", ")}
-                    <button onClick={() => handleCancelSchedule(item._id)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.72rem", fontWeight: "700", padding: 0 }}>
-                      Cancelar
-                    </button>
+                <div key={item._id} className="history-card-compact" style={{ borderLeftColor: item.isFavorite ? "#facc15" : statusColor }}>
+                  <div className="hcc-top">
+                    <span className="hcc-type-badge">{TYPE_LABELS[item.type] || item.type}</span>
+                    <h4 className="hcc-title" onClick={() => openDetailModal(item)} title="Ver contenido completo">
+                      {item.input?.product || "Sin nombre"}
+                    </h4>
+                    {item.isFavorite && <span title="Favorito" style={{ fontSize: "0.85rem", flexShrink: 0 }}>⭐</span>}
                   </div>
-                )}
-                <h4 style={{ color: "var(--text-active)", fontSize: "1rem", marginBottom: "0.1rem", fontWeight: "700", letterSpacing: "-0.02em", borderLeft: "3px solid var(--accent-primary)", paddingLeft: "0.6rem" }}>
-                  {item.input?.product || "Sin nombre"}
-                </h4>
-                {item.output && (() => {
-                  const raw = Array.isArray(item.output) ? item.output.join(" ") : typeof item.output === "object" ? JSON.stringify(item.output) : item.output;
-                  const preview = raw?.slice(0, 130);
-                  return preview ? (
-                    <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: "1.55", marginTop: "0.4rem", marginBottom: 0, paddingLeft: "0.6rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {preview}{raw.length > 130 ? "…" : ""}
-                    </p>
-                  ) : null;
-                })()}
-                <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                  <button className="btn-view-detail" onClick={() => openDetailModal(item)}>
-                    Ver completo
-                    <svg className="btn-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-                      <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-                    </svg>
-                  </button>
-                  {item.type === "campaign" && (
-                    <button
-                      onClick={() => openDetailModal(item)}
-                      title={item.imageUrl ? "Ver / cambiar imagen" : "Generar imagen para esta campaña"}
-                      style={{ height: "28px", padding: "0 0.75rem", fontSize: "0.74rem", background: item.imageUrl ? "linear-gradient(135deg, rgba(14,165,233,0.15), rgba(2,132,199,0.15))" : "rgba(201,105,43,0.1)", border: `1px solid ${item.imageUrl ? "rgba(14,165,233,0.4)" : "rgba(201,105,43,0.35)"}`, borderRadius: "999px", color: item.imageUrl ? "#38bdf8" : "var(--accent-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                      {item.imageUrl ? "Con imagen" : "🎨 Generar imagen"}
-                    </button>
+                  <div className="hcc-meta">
+                    {item.creatorName && <span className="hcc-author">{item.creatorName}</span>}
+                    <span>{new Date(item.createdAt).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                  </div>
+
+                  {item.scheduledPublish?.status === "pending" && (
+                    <div className="hcc-scheduled">
+                      🕒 {new Date(item.scheduledPublish.date).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      {" · "}{item.scheduledPublish.platforms.map((p) => PLATFORM_LABELS[p] || p).join(", ")}
+                      <button onClick={() => handleCancelSchedule(item._id)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.72rem", fontWeight: "700", padding: 0 }}>
+                        Cancelar
+                      </button>
+                    </div>
                   )}
-                  {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
-                    <button
-                      onClick={() => openDetailModal(item)}
-                      title="Generar video script para este contenido"
-                      style={{ height: "28px", padding: "0 0.75rem", fontSize: "0.74rem", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.35)", borderRadius: "999px", color: "#a78bfa", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: "700" }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                      🎬 Video Script
+
+                  <div className="hcc-actions">
+                    <button className="btn-view-detail" onClick={() => openDetailModal(item)}>
+                      Ver completo
+                      <svg className="btn-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                        <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                      </svg>
                     </button>
-                  )}
-                  <select
-                    value={item.status || "draft"}
-                    onChange={(e) => handleUpdateStatus(item._id, e.target.value)}
-                    title="Cambiar estado"
-                    className="status-pill"
-                    style={{
-                      marginLeft: "auto",
-                      color: STATUS_CONFIG[item.status || "draft"].color,
-                      background: STATUS_CONFIG[item.status || "draft"].bg,
-                      borderColor: `${STATUS_CONFIG[item.status || "draft"].color}55`,
-                      boxShadow: `0 2px 10px ${STATUS_CONFIG[item.status || "draft"].color}26`,
-                    }}
-                  >
-                    {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].icon} {STATUS_CONFIG[s].label}</option>)}
-                  </select>
+                    {isDraft ? (
+                      <button onClick={() => handleUpdateStatus(item._id, "approved")} title="Aprobar este contenido" className="btn-action-approve">
+                        ✓ Aprobar
+                      </button>
+                    ) : isTextType && (
+                      <button onClick={() => { setRefineModal(item); setRefineResult(""); }} title="Perfeccionar con IA" className="btn-action-refine">
+                        ✨ Perfeccionar
+                      </button>
+                    )}
+
+                    <div style={{ position: "relative", marginLeft: "auto" }}>
+                      <button className="btn-kebab" onClick={(e) => { e.stopPropagation(); setOpenCardMenu(menuOpen ? null : item._id); }} title="Más acciones">
+                        ⋯
+                      </button>
+                      {menuOpen && (
+                        <>
+                          <div style={{ position: "fixed", inset: 0, zIndex: 50 }} onClick={() => setOpenCardMenu(null)} />
+                          <div className="card-menu-dropdown">
+                            {isTextType && (
+                              <button onClick={() => { setPublishModalOpen({ content: item.output, imageUrl: item.imageUrl || null }); setOpenCardMenu(null); }}>
+                                📤 Publicar en redes
+                              </button>
+                            )}
+                            {isTextType && (
+                              <button onClick={() => { openScheduleModal(item); setOpenCardMenu(null); }}>
+                                📅 {item.scheduledPublish?.status === "pending" ? "Editar agendado" : "Agendar publicación"}
+                              </button>
+                            )}
+                            <button onClick={() => {
+                              const product = item.input?.product || TYPE_LABELS[item.type] || "resultado";
+                              if (item.type === "video" && item.output?.hook) exportVideoScriptToPDF({ product, script: item.output });
+                              else exportResultToPDF({ type: item.type, product, content: item.output });
+                              setOpenCardMenu(null);
+                            }}>
+                              ⬇ Descargar PDF
+                            </button>
+                            <button onClick={() => { toggleFavorite(item._id); setOpenCardMenu(null); }}>
+                              {item.isFavorite ? "★ Quitar de favoritos" : "☆ Guardar en favoritos"}
+                            </button>
+                            <button className="danger" onClick={() => { deleteHistoryItem(item._id); setOpenCardMenu(null); }}>
+                              🗑 Eliminar
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <select
+                      value={item.status || "draft"}
+                      onChange={(e) => handleUpdateStatus(item._id, e.target.value)}
+                      title="Cambiar estado"
+                      className="status-pill"
+                      style={{
+                        color: statusColor,
+                        background: STATUS_CONFIG[item.status || "draft"].bg,
+                        borderColor: `${statusColor}55`,
+                      }}
+                    >
+                      {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].icon} {STATUS_CONFIG[s].label}</option>)}
+                    </select>
+                  </div>
                 </div>
-              </div>
               );
             })}
           </div>
@@ -2728,7 +2736,8 @@ function Home() {
 
   return (
     <div className="app-shell">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} counts={sidebarCounts} upcomingCount={upcoming.length} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} counts={sidebarCounts} upcomingCount={upcoming.length}
+        historyStatusTab={historyStatusTab} onSelectHistoryStatus={setHistoryStatusTab} />
       <div className="app-body">
         <Header activeTab={activeTab} />
         <div className="main-content">

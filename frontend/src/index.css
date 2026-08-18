@@ -227,6 +227,21 @@ body {
   color: var(--accent-secondary);
   background: rgba(201,105,43,0.18);
 }
+.sidebar-subnav { margin-top: 1px; }
+.sidebar-subnav li a {
+  padding: 0.45rem 0.8rem 0.45rem 1.6rem;
+  font-size: 0.8rem;
+  gap: 0.55rem;
+}
+.sidebar-subdot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.sidebar-subnav li.active a .sidebar-subdot { opacity: 1; background: var(--accent-secondary); }
 .sidebar-badge-notify {
   margin-left: auto;
   font-size: 0.68rem;
@@ -623,6 +638,152 @@ body {
   flex-shrink: 0;
 }
 .status-pill:hover { transform: translateY(-1px) scale(1.03); }
+
+/* ── TABS DE ESTADO (Historial) ── */
+.history-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+.history-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.history-tab:hover { color: var(--text-soft); }
+.history-tab.active { color: var(--accent-secondary); border-bottom-color: var(--accent-primary); }
+.history-tab-count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  min-width: 1.4rem;
+  text-align: center;
+}
+.history-tab.active .history-tab-count { color: var(--accent-secondary); background: var(--accent-subtle); }
+
+/* ── TARJETA COMPACTA (Historial) ── */
+.history-card-compact {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: 0.85rem 1.1rem;
+  transition: border-color 0.15s ease;
+}
+.history-card-compact:hover { border-color: rgba(201,105,43,0.3); }
+.hcc-top { display: flex; align-items: center; gap: 0.55rem; }
+.hcc-type-badge {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-secondary);
+  background: var(--accent-subtle);
+  padding: 0.18rem 0.5rem;
+  border-radius: 4px;
+}
+.hcc-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-active);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hcc-title:hover { color: var(--accent-secondary); }
+.hcc-meta {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.25rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.hcc-author { color: var(--accent-secondary); font-weight: 600; }
+.hcc-scheduled {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.55rem;
+  font-size: 0.74rem;
+  color: #34d399;
+  background: rgba(52,211,153,0.08);
+  border: 1px solid rgba(52,211,153,0.25);
+  border-radius: var(--border-radius-sm);
+  padding: 0.35rem 0.65rem;
+}
+.hcc-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
+}
+
+/* ── MENÚ "···" DE ACCIONES SECUNDARIAS ── */
+.btn-kebab {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-kebab:hover { background: var(--bg-secondary); color: var(--text-active); }
+.card-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  min-width: 200px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.card-menu-dropdown button {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.card-menu-dropdown button:hover { background: var(--bg-tertiary); color: var(--text-active); }
+.card-menu-dropdown button.danger { color: #f87171; }
+.card-menu-dropdown button.danger:hover { background: rgba(239,68,68,0.1); }
+
 .cal-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; }
 .cal-modal { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 1.75rem; width: 340px; box-shadow: var(--card-glow); }
 .cal-modal-title { font-size: 1rem; font-weight: 700; color: var(--text-active); margin-bottom: 1.25rem; }

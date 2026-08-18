@@ -1,11 +1,19 @@
 import logo from "../assets/Softgic_Logo_White-scaled.png";
 
-function Sidebar({ activeTab, setActiveTab, counts = {}, upcomingCount = 0 }) {
+function Sidebar({ activeTab, setActiveTab, counts = {}, upcomingCount = 0, historyStatusTab = "all", onSelectHistoryStatus }) {
   const nav = (id, label, icon, badge, badgeClass = "sidebar-badge") => (
     <li key={id} className={activeTab === id ? "active" : ""}>
       <a href={`#${id}`} onClick={(e) => { e.preventDefault(); setActiveTab(id); }}>
         {icon}<span>{label}</span>
         {badge > 0 && <span className={badgeClass}>{badge}</span>}
+      </a>
+    </li>
+  );
+
+  const historySub = (status, label) => (
+    <li key={`history-${status}`} className={activeTab === "history" && historyStatusTab === status ? "active" : ""}>
+      <a href={`#history-${status}`} onClick={(e) => { e.preventDefault(); setActiveTab("history"); onSelectHistoryStatus?.(status); }}>
+        <span className="sidebar-subdot" /><span>{label}</span>
       </a>
     </li>
   );
@@ -69,9 +77,17 @@ function Sidebar({ activeTab, setActiveTab, counts = {}, upcomingCount = 0 }) {
       <div className="sidebar-section">
         <p className="sidebar-section-label">Historial</p>
         <ul className="sidebar-nav">
-          {nav("history", "Mis Creaciones",
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          )}
+          <li className={activeTab === "history" && historyStatusTab === "all" ? "active" : ""}>
+            <a href="#history" onClick={(e) => { e.preventDefault(); setActiveTab("history"); onSelectHistoryStatus?.("all"); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Todo</span>
+            </a>
+          </li>
+        </ul>
+        <ul className="sidebar-nav sidebar-subnav">
+          {historySub("draft", "Borradores")}
+          {historySub("approved", "Aprobados")}
+          {historySub("published", "Publicados")}
         </ul>
       </div>
     </aside>
