@@ -625,6 +625,7 @@ body {
 .cal-btn-save:hover { background: var(--accent-secondary); }
 
 /* ── BOTONES ACCIÓN TARJETA HISTORIAL ── */
+.btn-action-approve,
 .btn-action-refine,
 .btn-action-download,
 .btn-action-fav,
@@ -640,6 +641,15 @@ body {
   border: none;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+.btn-action-approve {
+  background: linear-gradient(135deg, #2563eb, #3d8bd6);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(61,139,214,0.3);
+}
+.btn-action-approve:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(61,139,214,0.45);
 }
 .btn-action-refine {
   background: linear-gradient(135deg, #6d28d9, #7c3aed);

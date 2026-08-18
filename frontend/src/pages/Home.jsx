@@ -2306,6 +2306,11 @@ function Home() {
               return (
               <div key={item._id} className="history-card" style={{ border: `1px solid ${item.isFavorite ? "rgba(250,204,21,0.35)" : "var(--border-color)"}`, padding: "1.25rem 1.5rem" }}>
                 <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", justifyContent: "flex-end", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+                  {(item.status || "draft") === "draft" && (
+                    <button onClick={() => handleUpdateStatus(item._id, "approved")} title="Aprobar este contenido" className="btn-action-approve">
+                      ✓ Aprobar
+                    </button>
+                  )}
                   {(item.type === "campaign" || item.type === "copy" || item.type === "hashtag") && (
                     <button onClick={() => { setRefineModal(item); setRefineResult(""); }} title="Perfeccionar con IA" className="btn-action-refine">
                       ✨ Perfeccionar
@@ -3275,6 +3280,16 @@ function Home() {
 
             {/* Footer con acciones */}
             <div style={{ padding: "1rem 1.75rem", borderTop: "1px solid var(--border-color)", display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap", flexShrink: 0 }}>
+              {(detailModal.status || "draft") === "draft" && (
+                <button
+                  onClick={() => {
+                    handleUpdateStatus(detailModal._id, "approved");
+                    setDetailModal((prev) => prev && { ...prev, status: "approved" });
+                  }}
+                  style={{ background: "rgba(61,139,214,0.12)", border: "1px solid rgba(61,139,214,0.35)", color: "#3d8bd6", borderRadius: "var(--border-radius-sm)", padding: "0.45rem 0.9rem", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}>
+                  ✓ Aprobar
+                </button>
+              )}
               {(detailModal.type === "campaign" || detailModal.type === "copy" || detailModal.type === "hashtag") && (
                 <button
                   onClick={() => { setRefineModal(detailModal); setRefineResult(""); closeDetailModal(); }}
