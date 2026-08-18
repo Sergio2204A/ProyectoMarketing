@@ -2310,10 +2310,10 @@ function Home() {
                 <textarea
                   value={detailEditContent}
                   onChange={(e) => setDetailEditContent(e.target.value)}
-                  style={{ width: "100%", minHeight: "260px", background: "rgba(11,15,25,0.6)", border: "1.5px solid var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "1.25rem", fontSize: "0.93rem", color: "var(--text-active)", lineHeight: "1.8", resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+                  style={{ width: "100%", minHeight: "260px", background: "var(--bg-secondary)", border: "1.5px solid var(--accent-secondary)", borderRadius: "var(--border-radius-sm)", padding: "1.25rem", fontSize: "0.93rem", color: "var(--text-active)", lineHeight: "1.8", resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
                 />
               ) : (
-                <div style={{ background: "rgba(11,15,25,0.5)", border: "1px solid var(--border-color)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.75rem", fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.85", whiteSpace: "pre-wrap" }}>
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderLeft: "3px solid var(--accent-primary)", borderRadius: "var(--border-radius-sm)", padding: "1.75rem", fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.85", whiteSpace: "pre-wrap" }}>
                   {outputToString(detailModal.output)}
                 </div>
               )}
