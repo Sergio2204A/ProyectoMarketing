@@ -738,7 +738,7 @@ function Home() {
             ) : (
               <div className="activity-list">
                 {recentFive.map((item) => (
-                  <div key={item._id} className="activity-item">
+                  <div key={item._id} className="activity-item activity-item-link" onClick={() => openDetailModal(item)}>
                     <span className={badgeClass(item.type)}>{TYPE_LABELS[item.type] || item.type}</span>
                     <span className="activity-product">{item.input?.product || "—"}</span>
                     {item.creatorName && <span className="activity-time" style={{ color: "var(--accent-secondary)" }}>{item.creatorName}</span>}

@@ -464,6 +464,17 @@ body {
   border-bottom: 1px solid var(--border-soft);
 }
 .activity-item:last-child { border-bottom: none; }
+.activity-item-link {
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  transition: transform 0.15s ease, background-color 0.15s ease, padding 0.15s ease;
+}
+.activity-item-link:hover {
+  transform: translateX(4px);
+  background-color: var(--bg-tertiary);
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
 .activity-badge {
   font-size: 0.65rem;
   font-weight: 700;
